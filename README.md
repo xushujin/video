@@ -107,6 +107,7 @@ video/
 ├── gradle/libs.versions.toml           # 版本集中管理
 ├── gradlew / gradlew.bat / gradle/wrapper/
 ├── .github/workflows/build-apk.yml     # tag 触发构建 + 挂 Release
+├── fdroid/                             # F-Droid 收录材料（需提交到 fdroiddata）
 └── app/src/main/
     ├── AndroidManifest.xml
     ├── res/                            # 主题 + 自适应图标（纯矢量，无二进制图）
@@ -342,7 +343,35 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 
 本项目采用 **[Apache License 2.0](LICENSE)** 授权。
 
-可自由使用、修改、分发（包括商用），需保留版权声明与许可副本。
+可自由使用、修改、分发（包括商用），需保留版权声明与许可副本。选择 Apache-2.0 而不是
+GPL 系，是因为它与本项目依赖（AndroidX / Media3 / kotlinx.serialization）的许可一致，
+且不要求衍生作品开源。
+
+### 关于 F-Droid
+
+收录材料在 [`fdroid/`](fdroid/README.md)，完整步骤见
+[`fdroid/README.md`](fdroid/README.md)。要点：
+
+1. **构建在无签名密钥时也能通过** —— 已**实测**。
+   `app/build.gradle.kts` 在既没有 `KEYSTORE_PATH` 环境变量、也没有仓库内
+   `keystore.properties` 时，会产出**未签名**的 release 包而不是构建失败，
+   F-Droid 拿去用自己的密钥重新签名。
+   实测方式：从 `v1.0.0` 这个 tag 克隆一份干净检出（没有密钥、没有 `local.properties`），
+   跑 `:app:assembleRelease` —— 构建通过，产物 `QingYing-1.0.0-release.apk`，
+   `apksigner verify` 报 `Missing META-INF/MANIFEST.MF`，即未签名。
+2. **提交构建配方**：见
+   [`fdroid/metadata/com.azhan.qingying.yml`](fdroid/metadata/com.azhan.qingying.yml)。
+   把它复制到 `gitlab.com/fdroid/fdroiddata` 的 `metadata/` 目录
+   （文件名必须是 `com.azhan.qingying.yml`），然后提 MR。
+   配方里 **必须写 `output`** —— 本项目把产物名改成了 `QingYing-<versionName>-release.apk`，
+   不是默认的 `app-release-unsigned.apk`。
+3. **每次发版必须递增 `versionCode`**：F-Droid 靠 `versionCode` 判断新旧，
+   一直停在 `1` 会导致新版本无法被识别。
+
+注意：F-Droid 版与本地 / CI 版**签名不同**，用户切换时需要先卸载旧版。
+另外本项目用 AGP 9.4.1 + `compileSdk = 37`，F-Droid 构建服务器能否装到对应 SDK
+需要在 MR 评审时确认 —— **元数据里没有任何字段能指定 JDK 或 SDK 版本**（查过文档，确实没有），
+这一点我无法在本地验证。
 
 ---
 

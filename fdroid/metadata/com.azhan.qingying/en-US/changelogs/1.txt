@@ -1,0 +1,12 @@
+First release.
+
+* Add a local folder and it becomes a group named after that folder
+* 21 container formats, natural file ordering, background duration probing
+* Background audio: the player runs in a foreground service, and the video track
+  is disabled when you leave the player screen
+* Sleep timer with presets, a custom duration, or "when this video ends"
+* Portrait and landscape layouts, landscape is full screen
+* Screen stays on only while the player screen is in the foreground
+* Per-video resume positions and a continue-watching row
+* Playback speed from 0.5x to 3x, 15 second seek jumps
+* No runtime permissions are requested

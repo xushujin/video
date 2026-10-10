@@ -1,0 +1,49 @@
+QingYing is a lightweight, fully offline video player for the files that are
+already on your phone. No account, no network, no ads, no runtime permissions.
+
+<b>Library</b>
+* Add a local folder with the system file picker. No storage permission is
+  requested - the folder grant is persisted by the system (SAF)
+* Each folder becomes a group, and the group is named after the folder itself
+* Recursive scanning, up to 8 levels deep and 3000 files, hidden files skipped
+* Files are ordered naturally, so episode 2 comes before episode 10
+* 21 container formats are recognised: mp4, m4v, mkv, webm, avi, mov, flv, ts,
+  m2ts, mts, 3gp, 3g2, wmv, asf, rmvb, rm, mpg, mpeg, vob, ogv and f4v
+* Duration and resolution are probed in the background when a group is expanded,
+  so adding a folder is never slowed down by it
+* Thumbnails come from the frame at 1 second - frame 0 is usually black
+
+<b>Playback</b>
+* The player runs in a foreground service, not in the screen you are looking at,
+  so audio keeps going in the background and with the screen off
+* When you leave the player screen or switch away, the video surface is detached
+  and the video track is disabled, so only audio is decoded. It saves battery,
+  and avoids drawing to a surface that has already been destroyed
+* Sleep timer: presets from 5 to 120 minutes, a custom number of minutes, or
+  "when this video ends". At zero it either pauses playback or exits the app
+* Speed from 0.5x to 3x, drag to seek, or jump 15 seconds back and forward
+* Previous and next move through the queue, which is the folder you opened
+* Per-video resume positions, plus a "Continue watching" row on the home screen
+* Portrait and landscape layouts; landscape hides the system bars for a full
+  screen picture
+
+<b>Screen</b>
+* The screen stays on while the player screen is in the foreground, so a video
+  you are watching is never interrupted by the screen timeout
+* Switching away releases it immediately, so listening to audio in the
+  background does not leave the screen lit all night
+
+<b>Privacy</b>
+* No runtime permissions are requested at all
+* The notification permission is declared but never requested. Without it the
+  media notification is simply not shown - background playback is unaffected
+* Video folders are chosen through the system file picker and can be removed
+  from the list at any time
+* Everything stays on your device
+
+<b>Notes</b>
+* Whether an exotic codec plays depends on your device's decoders. Files that
+  cannot be played report the actual error instead of silently showing black
+* Picture-in-picture is not implemented
+* The F-Droid build is signed with F-Droid's own key, so it cannot upgrade a
+  copy installed from GitHub Releases - uninstall that copy first
