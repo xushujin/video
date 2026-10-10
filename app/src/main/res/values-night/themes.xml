@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      深色外壳配色固定，窗口背景保持一致，避免系统深色/浅色切换时闪色。
+      外壳配色由 App 内设置控制（见 ui/theme/Palette.kt），不跟随系统。
+    -->
+    <style name="Theme.QingYing" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF16181D</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

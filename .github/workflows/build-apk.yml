@@ -1,0 +1,135 @@
+name: Build Release APK
+
+# 只在打 tag 时自动编译，例如：
+#   git tag v1.0.0 && git push origin v1.0.0
+# 也可以在 Actions 页面手动触发（workflow_dispatch）。
+#
+# 两个从同类项目踩出来的坑（别再犯）：
+# 1) GitHub 的 if: 表达式里**不能**用 secrets 上下文（会报
+#    "Unrecognized named-value: 'secrets'"）。所以「有没有配签名密钥」的判断
+#    放到 shell 里做，secrets 只通过 env 注入。
+# 2) 不用 android-actions/setup-android：它在较新的 cmdline-tools 上会去装早已
+#    下线的 legacy "tools" 包，`sdkmanager tools` 直接 exit code 1 让整个 job 挂掉。
+#    GitHub 的 ubuntu runner 本来就预装了完整 Android SDK，直接用即可。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# 把 APK 挂到 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # 本项目 AGP 9.4.1 要求 JDK 17+，用 17 与本地开发环境保持一致。
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # 直接用 runner 预装的 Android SDK（镜像已把 ANDROID_HOME 设为
+      # /usr/local/lib/android/sdk），只补装本项目需要的几个包。
+      #
+      # 本项目 compileSdk = 37，且 media3 1.11 要求 minCompileSdk >= 36。
+      #
+      # 两个包名都不能想当然：
+      #   - 平台包名带 minor 版本，是 platforms;android-37.0，写成 android-37 会
+      #     "Failed to find package" 并以退出码 1 结束；
+      #   - build-tools 用 36.0.0 而不是 37.0.0 —— AGP 9.4.1 在 compileSdk 37 下
+      #     默认取的就是 36.0.0（本机实测：只装 36.0.0 即可构建）。
+      - name: Install Android SDK packages
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          # 优先用 cmdline-tools/latest，没有就取版本号最大的那个目录
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMANAGER" ] || SDKMANAGER="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          echo "sdkmanager=$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          "$SDKMANAGER" --list_installed
+
+      # 签名密钥决定 APK 能否安装，两条路径：
+      #   方式 A（推荐）：仓库 Settings → Secrets → Actions 配 KEYSTORE_BASE64
+      #     （本地执行 base64 -i keystore/qingying-release.jks 得到）
+      #     用与你本地同一个 keystore 签名 → 版本更新可直接覆盖安装。
+      #     可选的 KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD 不配则用下面默认值。
+      #   方式 B（零配置兜底）：没配就自动生成 Android debug keystore 签名。
+      #     APK 一样能装，但每次 CI 密钥不同，覆盖安装前需先卸载旧包。
+      #
+      # 这里导出的环境变量由 app/build.gradle.kts 读取（优先级高于
+      # 本机的 keystore.properties，后者在 CI 上不存在）。
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/release-key.jks"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/release-key.jks" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-qingying2026}" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=${KEY_ALIAS:-qingying}" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=${KEY_PASSWORD:-qingying2026}" >> "$GITHUB_ENV"
+            echo "使用仓库 Secret 里的 keystore 签名"
+          else
+            mkdir -p "$HOME/.android"
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "KEYSTORE_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=androiddebugkey" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "未配置 KEYSTORE_BASE64，回退用 debug keystore 签名"
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK (artifact)
+        uses: actions/upload-artifact@v7
+        with:
+          name: qingying-release-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      # 把 APK 挂到 GitHub Release。只在 tag 构建时执行：
+      # 手动触发（workflow_dispatch）没有 tag，创建不了 Release，只出 artifact。
+      # 用 runner 自带的 gh CLI（不引第三方 action）；已存在同名 Release 就覆盖资源。
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          # 附件名必须纯 ASCII：GitHub 会删掉 Release 资源名里的非 ASCII 字符。
+          ASSET="QingYing-${TAG}.apk"
+          # 产物名由 app/build.gradle.kts 定制为 QingYing-<versionName>-release.apk，
+          # 这里用通配符取，避免版本号写死在 workflow 里。
+          APK="$(ls app/build/outputs/apk/release/*.apk | head -1)"
+          echo "打包产物：$APK"
+          cp "$APK" "$ASSET"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，覆盖资源"
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            echo "创建 Release $TAG"
+            gh release create "$TAG" "$ASSET" --title "轻影 $TAG" --generate-notes
+          fi
+          gh release view "$TAG" --json url,tagName,assets

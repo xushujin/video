@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      仅作为启动窗口背景，真正的配色由 Compose 主题接管。
+      默认深色外壳，所以窗口背景也用深色，避免启动瞬间白屏闪一下。
+    -->
+    <style name="Theme.QingYing" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF16181D</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

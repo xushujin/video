@@ -1,0 +1,50 @@
+# ============================================================
+# 轻影 QingYing — .gitignore
+# ============================================================
+
+# ---------- Gradle ----------
+.gradle/
+build/
+# wrapper 必须入库，否则 clone 后无法构建
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ---------- Android 构建产物 ----------
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+
+# ---------- 本机配置与签名材料（绝对不可入库） ----------
+local.properties
+keystore.properties
+/keystore/
+*.jks
+*.keystore
+*.p12
+*.pepk
+
+# ---------- IDE ----------
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+.kotlin/
+
+# ---------- 系统文件 ----------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ---------- 日志与崩溃转储 ----------
+*.log
+*.hprof
+
+# ---------- 说明 ----------
+# .workbuddy-ai/ 是 AI 助手的工作区记录（含项目决策笔记）。
+#   若希望这些笔记随仓库一起版本化，保持现状；若只想提交纯源码，取消下面一行的注释。
+.workbuddy-ai/

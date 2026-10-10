@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  图标上层：拟态凸起圆盘 + 强调色播放三角。
+  立体感做法：右下偏移的阴影月牙 + 圆盘用背景色，纯色填充，不依赖向量渐变。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 阴影：比圆盘略大、向右下偏移，只在右下露出一道月牙 -->
+    <path
+        android:pathData="M55,55m-30.5,0a30.5,30.5 0 1,0 61,0a30.5,30.5 0 1,0 -61,0"
+        android:fillColor="#FF0B0D10" />
+
+    <!-- 凸起圆盘：用外壳背景色 -->
+    <path
+        android:pathData="M54,54m-30,0a30,30 0 1,0 60,0a30,30 0 1,0 -60,0"
+        android:fillColor="#FF1A1D23" />
+
+    <!-- 播放三角：24dp 图标的包围盒是 x 8~19 / y 5~19（中心约 13.5,12），
+         放大 2.4 倍后 translate = 54 - 13.5*2.4 = 21.6，纵向 54 - 12*2.4 = 25.2 -->
+    <group
+        android:scaleX="2.4"
+        android:scaleY="2.4"
+        android:translateX="21.6"
+        android:translateY="25.2">
+        <path
+            android:pathData="M8,5v14l11,-7z"
+            android:fillColor="#FF6C8CFF" />
+    </group>
+</vector>
