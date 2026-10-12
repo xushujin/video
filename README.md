@@ -211,13 +211,45 @@ git push origin v1.0.0  # 推上去即触发编译
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
-签名两种路径（决定 APK 能否安装）：
+#### 签名：必须配 `KEYSTORE_BASE64`，否则 CI 直接失败
 
-- **方式 A（推荐）**：仓库 `Settings → Secrets → Actions` 加 `KEYSTORE_BASE64`
-  （本地执行 `base64 -i keystore/qingying-release.jks` 得到）。
-  APK 用与你本地**同一个** keystore 签名，版本更新可直接覆盖安装。
-- **方式 B（零配置兜底）**：没配密钥时，工作流自动用 Android debug keystore 签名，
-  APK **一样能安装**；但每次 CI 密钥不同，覆盖安装前需先卸载旧包。
+**这是唯一一条硬性前置条件。** 仓库 `Settings → Secrets and variables → Actions`
+必须配一个 Secret：
+
+```bash
+# 名称：KEYSTORE_BASE64
+# 值：下面这条命令的输出（一整行 base64）
+base64 -i keystore/qingying-release.jks
+```
+
+口令的默认值与本地 `keystore.properties` 一致，所以**只需要配这一个 Secret**。
+想更严的话把 `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` 也配成 Secret。
+
+没配会怎样：**`Prepare signing key` 这一步直接 `exit 1`，CI 变红。**
+
+为什么不「零配置兜底」用临时 debug keystore 签名？因为那种失败是**静默**的：
+
+| 场景 | 结果 |
+|---|---|
+| 本地构建包 → 覆盖装本地构建包 | ✅ 同一把钥匙 |
+| **GitHub 包 → 覆盖装本地构建包** | ❌ `INSTALL_FAILED_UPDATE_INCOMPATIBLE` |
+| **GitHub 包 → 覆盖装上一次 GitHub 包** | ❌ 同样失败（每次 CI 都新生成一把 debug key） |
+| F-Droid 包 → 覆盖装以上任一个 | ❌ 又是另一把钥匙 |
+
+用 debug 兜底时，CI 是绿的、Release 有附件、包也能装到**空设备**上 ——
+只有「升级」这个场景才暴露。宁可让 CI 红。
+
+工作流里还加了一步 `Verify APK signature`，把 `Signer #1` 的证书指纹打进日志。
+本地用同一条命令对照：
+
+```bash
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.0.0-release.apk
+```
+
+两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
+
+> ⚠️ **`.jks` 必须离线备份。** 丢了就永远无法再发能覆盖升级的新版本 ——
+> 只能改包名重来。这是唯一一个「丢了就不可逆」的文件。
 
 ---
 
