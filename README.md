@@ -251,6 +251,18 @@ apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.0.0-rele
 > ⚠️ **`.jks` 必须离线备份。** 丢了就永远无法再发能覆盖升级的新版本 ——
 > 只能改包名重来。这是唯一一个「丢了就不可逆」的文件。
 
+**当前状态**：`v1.0.0` 那个 Release 附件是在这套修复**之前**构建的，签名是
+`CN=Android Debug`（实测确认），与本地构建的 `CN=QingYing` 不是同一把钥匙。
+要把它替换掉，按顺序做两步：
+
+```bash
+# 1) 先在仓库配好 KEYSTORE_BASE64（见上），否则重打 tag 只会让 CI 变红
+# 2) 再重打 tag 触发重建，Release 附件会被 --clobber 覆盖
+git tag -f v1.0.0 && git push -f origin v1.0.0
+```
+
+> 已经装了那个 debug 签名版本的话，换包前需要先卸载一次。
+
 ---
 
 ## 四、几个关键设计
@@ -349,6 +361,9 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   即「UI 挂 Surface → Service 里的播放器渲染」这条链路成立
 - 进度条拖动链路：`NeuSlider` 已接上 `onValueChangeFinished`，
   「拖动中」的临时值会在抬手时提交给 `seekTo`（此前这个回调漏接，导致拖了没反应）
+- CI 签名两条路径都模拟跑过（直接从 workflow 抽出 `Prepare signing key` 的脚本执行）：
+  未配 `KEYSTORE_BASE64` → 退出码 1、不写任何 env；配了 → 干净检出构建出的包
+  签名 `CN=QingYing`，SHA-256 与本地构建完全一致
 
 **未验证：**
 
