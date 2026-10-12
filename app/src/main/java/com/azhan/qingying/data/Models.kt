@@ -85,8 +85,13 @@ enum class SleepMode { OFF, COUNTDOWN, END_OF_VIDEO }
 /** 应用偏好。 */
 @Serializable
 data class AppPrefs(
-    /** 外壳（列表/设置页）是否用深色。播放页恒为深色。 */
-    val darkShell: Boolean = true,
+    /**
+     * 外壳（列表 / 设置页）是否用深色。**默认浅色**，播放页不受此项影响（恒为近黑）。
+     *
+     * 注意：这是**默认值**。老版本装过一次之后，DataStore 里已经存了显式的
+     * `darkShell = true`，所以升级上来仍是深色 —— 尊重用户已经落盘的选择，不强制迁移。
+     */
+    val darkShell: Boolean = false,
     /** 打开视频时是否自动续播上次位置。 */
     val autoResume: Boolean = true,
     /** 默认倍速。 */

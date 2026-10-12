@@ -5,7 +5,7 @@
       外壳配色由 App 内设置控制（见 ui/theme/Palette.kt），不跟随系统。
     -->
     <style name="Theme.QingYing" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF16181D</item>
+        <item name="android:windowBackground">#FFEDEFF3</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>

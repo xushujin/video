@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.0.0**（`versionName = "1.0.0"`，tag `v1.0.0`，与产物名一致）
+- 版本 **v1.1.0**（`versionCode = 2`，`versionName = "1.1.0"`，tag `v1.1.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 22 个 Kotlin 文件、约 4000 行
 - release APK 约 **2.3 MB**
@@ -94,8 +94,11 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 ### 6. 外观
 
 - 拟态（Neumorphism）风格，与同系列项目一致
-- 外壳（列表 / 设置）可切深色 / 浅色，**播放页恒为近黑** ——
+- 外壳（列表 / 设置）**默认浅色**，可在设置里切深色，选择会被记住
+- **播放页恒为近黑**，不受上面那项影响 ——
   内容页不该被导航页的配色污染，画面边缘也不该出现一圈亮框
+- 启动窗口背景跟随浅色外壳（`windowBackground = #EDEFF3`），避免启动瞬间闪一下深色
+- 自适应图标同样按浅色配色重绘（圆盘 `#EDEFF3` / 月牙 `#B9C0CE` / 三角 `#4E62E0`）
 
 ---
 
@@ -173,13 +176,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.0.0-release.apk` | **2.3 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.0.0-debug.apk` | 23 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.1.0-release.apk` | **2.3 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.1.0-debug.apk` | 23 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.0.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.1.0-release.apk
 ```
 
 ### 签名
@@ -200,14 +203,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.0.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.0.0  # 推上去即触发编译
+git tag v1.1.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.1.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.0.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.1.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -243,7 +246,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.0.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.1.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -251,14 +254,13 @@ apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.0.0-rele
 > ⚠️ **`.jks` 必须离线备份。** 丢了就永远无法再发能覆盖升级的新版本 ——
 > 只能改包名重来。这是唯一一个「丢了就不可逆」的文件。
 
-**当前状态：已修好并实测确认。** `v1.0.0` 的 Release 附件曾经是
-`CN=Android Debug`（修复前构建的），配好 Secret 并重打 tag 后已替换为
-`CN=QingYing`，SHA-256 `3fa551ff…17ec`，与本地构建**完全一致**。
-下载回来验过：v2 签名通过、`com.azhan.qingying` / versionCode 1 / versionName 1.0.0、
+**已修好并实测确认。** 修复前 CI 出的包是 `CN=Android Debug`（每次还不一样），
+配好 Secret 后重新发布的包已变成 `CN=QingYing`，SHA-256 `3fa551ff…17ec`，
+与本地构建**完全一致**。下载回来验过：v2 签名通过、包名版本号正确、
 不带 `application-debuggable`，是正经 release 包。
 
-> 如果你之前装过那个 `CN=Android Debug` 的版本，换包前需要先卸载一次。
-> 此后 GitHub / 本地 / 未来 F-Droid 三个来源里，前两者已同签名，可直接覆盖升级。
+> 只装过 `CN=Android Debug` 那个版本的话，换包前需要先卸载一次。
+> 此后的 GitHub 包与本地包同签名，可以直接覆盖升级。
 
 ---
 
@@ -401,8 +403,8 @@ GPL 系，是因为它与本项目依赖（AndroidX / Media3 / kotlinx.serializa
    `app/build.gradle.kts` 在既没有 `KEYSTORE_PATH` 环境变量、也没有仓库内
    `keystore.properties` 时，会产出**未签名**的 release 包而不是构建失败，
    F-Droid 拿去用自己的密钥重新签名。
-   实测方式：从 `v1.0.0` 这个 tag 克隆一份干净检出（没有密钥、没有 `local.properties`），
-   跑 `:app:assembleRelease` —— 构建通过，产物 `QingYing-1.0.0-release.apk`，
+   实测方式：从 `v1.1.0` 这个 tag 克隆一份干净检出（没有密钥、没有 `local.properties`），
+   跑 `:app:assembleRelease` —— 构建通过，产物 `QingYing-1.1.0-release.apk`，
    `apksigner verify` 报 `Missing META-INF/MANIFEST.MF`，即未签名。
 2. **提交构建配方**：见
    [`fdroid/metadata/com.azhan.qingying.yml`](fdroid/metadata/com.azhan.qingying.yml)。
@@ -427,6 +429,7 @@ README 里凡**能被代码证伪**的说法，都要能核对 —— 因为这�
 照着错的写，第一行就编不过，或者更糟：**看着没问题，实际没生效**。
 
 v1.0.0 发布前做了一次核对，下面记录**改了什么、为什么错、以及哪些查不到**。
+（这一节是 v1.0.0 那次的历史记录，保留原文不随后续版本改动。）
 
 ### 本次修正的 4 处不一致
 

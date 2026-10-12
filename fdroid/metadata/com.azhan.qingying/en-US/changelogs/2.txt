@@ -1,0 +1,6 @@
+Changed the default shell theme to light and redrew the launcher icon to match it.
+
+* The app now starts in the light theme. The player screen is still near-black -
+  a video looks wrong surrounded by anything bright, so that is unaffected
+* New light launcher icon, matching the light palette
+* You can still switch to dark in Settings; the choice is remembered
