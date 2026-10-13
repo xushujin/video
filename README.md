@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.1.0**（`versionCode = 2`，`versionName = "1.1.0"`，tag `v1.1.0`）
+- 版本 **v1.2.0**（`versionCode = 3`，`versionName = "1.2.0"`，tag `v1.2.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 22 个 Kotlin 文件、约 4000 行
 - release APK 约 **2.3 MB**
@@ -26,6 +26,12 @@
 - 展开分组时后台补时长 / 分辨率（分批落盘），**不放在扫描阶段** ——
   上千个视频逐个开 `MediaMetadataRetriever` 会让「添加目录」卡住
 - 顶部「继续观看」按最近播放时间倒序，只列看到一半的（超过 5 秒且没到末尾 15 秒）
+- **文件搜索**：顶栏放大镜进入，跨全部已添加文件夹按「文件名 / 子目录」匹配
+  （忽略大小写），命中的那段在标题里高亮；每条结果标出所属文件夹，
+  点开仍以该文件夹为播放队列，所以照样自动连播下一集
+  - 不匹配文件夹名 —— 搜的是**列表里的文件**，不是分组
+  - 纯内存过滤（上限 3000 个文件），不加防抖，敲一个字就出结果
+  - 搜索时按系统返回键先退出搜索，不会直接退出应用
 - 缩略图取视频第 1 秒的帧（第 0 帧常是黑场），内存 LRU 缓存，不落盘
 
 ### 2. 后台播放音频
@@ -176,13 +182,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.1.0-release.apk` | **2.3 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.1.0-debug.apk` | 23 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.2.0-release.apk` | **2.3 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.2.0-debug.apk` | 23 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.1.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.2.0-release.apk
 ```
 
 ### 签名
@@ -203,14 +209,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.1.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.1.0  # 推上去即触发编译
+git tag v1.2.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.2.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.1.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.2.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -246,7 +252,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.1.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.2.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -403,8 +409,8 @@ GPL 系，是因为它与本项目依赖（AndroidX / Media3 / kotlinx.serializa
    `app/build.gradle.kts` 在既没有 `KEYSTORE_PATH` 环境变量、也没有仓库内
    `keystore.properties` 时，会产出**未签名**的 release 包而不是构建失败，
    F-Droid 拿去用自己的密钥重新签名。
-   实测方式：从 `v1.1.0` 这个 tag 克隆一份干净检出（没有密钥、没有 `local.properties`），
-   跑 `:app:assembleRelease` —— 构建通过，产物 `QingYing-1.1.0-release.apk`，
+   实测方式：从 `v1.2.0` 这个 tag 克隆一份干净检出（没有密钥、没有 `local.properties`），
+   跑 `:app:assembleRelease` —— 构建通过，产物 `QingYing-1.2.0-release.apk`，
    `apksigner verify` 报 `Missing META-INF/MANIFEST.MF`，即未签名。
 2. **提交构建配方**：见
    [`fdroid/metadata/com.azhan.qingying.yml`](fdroid/metadata/com.azhan.qingying.yml)。

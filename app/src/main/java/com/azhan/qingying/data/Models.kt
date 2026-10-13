@@ -28,6 +28,19 @@ data class VideoItem(
 
     val ext: String get() = fileName.substringAfterLast('.', "").lowercase()
 
+    /**
+     * 搜索匹配：按**文件名 / 相对路径**做忽略大小写的子串匹配。
+     *
+     * 只比对路径就够了 —— `relPath` 形如 "第一季/01.mp4"，末尾就是文件名，
+     * 所以「按文件名搜」和「按子目录搜」是同一条规则。
+     * 不匹配文件夹名：搜的是**列表里的文件**，不是分组。
+     */
+    fun matches(query: String): Boolean {
+        val q = query.trim()
+        if (q.isEmpty()) return true
+        return relPath.contains(q, ignoreCase = true) || fileName.contains(q, ignoreCase = true)
+    }
+
     /** 形如 "1080P" 的清晰度标签；未知时返回 null。 */
     val qualityLabel: String?
         get() = when {

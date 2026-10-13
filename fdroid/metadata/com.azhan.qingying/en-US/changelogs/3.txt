@@ -1,0 +1,8 @@
+Added a search box to the video list.
+
+* Tap the magnifier in the top bar to search across every folder you have added
+* Matches file names and sub-folder paths, ignoring case; the matched part of the
+  name is highlighted in the results
+* Each result shows which folder it came from, and playing one still queues the
+  whole folder, so the next episode follows automatically
+* The back button leaves search mode first instead of closing the app

@@ -1,6 +1,7 @@
 package com.azhan.qingying.ui.home
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -25,8 +26,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -35,6 +40,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.AlertDialog
@@ -51,13 +57,22 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.azhan.qingying.AppContainer
@@ -69,10 +84,12 @@ import com.azhan.qingying.ui.neu.NeuButton
 import com.azhan.qingying.ui.neu.NeuIconButton
 import com.azhan.qingying.ui.neu.NeuProgress
 import com.azhan.qingying.ui.neu.NeuSurface
+import com.azhan.qingying.ui.neu.neuInner
 import com.azhan.qingying.ui.theme.LocalNeuPalette
 import com.azhan.qingying.util.formatDate
 import com.azhan.qingying.util.formatDuration
 import com.azhan.qingying.util.formatSize
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -99,6 +116,31 @@ fun HomeScreen(
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
     var pendingRemoval by remember { mutableStateOf<VideoFolder?>(null) }
     var scanning by remember { mutableStateOf(false) }
+
+    // 搜索。用 rememberSaveable 而不是 remember：去设置页再回来时
+    // Navigation Compose 会销毁 HOME 的组合，普通 remember 保不住搜索词。
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+
+    // 一次遍历把命中的 (分组, 视频) 摊平。上限 3000 个文件，纯内存过滤，
+    // 快到不需要防抖 —— 加了反而让输入有延迟感。
+    val results = remember(folders, query) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            emptyList()
+        } else {
+            folders.flatMap { folder ->
+                folder.videos.filter { it.matches(q) }.map { SearchHit(folder, it) }
+            }
+        }
+    }
+
+    // 搜索时按系统返回键：先退出搜索，而不是直接退出应用。
+    // 只在 searching 为 true 时接管，平时不影响导航。
+    BackHandler(enabled = searching) {
+        searching = false
+        query = ""
+    }
 
     val resumable = remember(folders, progress) { container.library.resumable() }
     val totalVideos = folders.sumOf { it.count }
@@ -143,6 +185,13 @@ fun HomeScreen(
                     folderCount = folders.size,
                     videoCount = totalVideos,
                     scanning = scanning,
+                    searching = searching,
+                    query = query,
+                    onQueryChange = { query = it },
+                    onToggleSearch = {
+                        searching = !searching
+                        if (!searching) query = ""
+                    },
                     onAddFolder = { picker.launch(null) },
                     onRescanAll = {
                         scope.launch {
@@ -156,89 +205,129 @@ fun HomeScreen(
                 )
             }
 
-            if (folders.isEmpty()) {
-                item(key = "empty") {
-                    EmptyState(onAddFolder = { picker.launch(null) })
-                }
-            }
-
-            if (resumable.isNotEmpty()) {
-                item(key = "resume-title") {
-                    SectionTitle("继续观看")
-                }
-                item(key = "resume-row") {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp),
-                    ) {
-                        items(resumable, key = { it.first.id }) { (video, item) ->
-                            ResumeCard(
+            if (searching) {
+                val q = query.trim()
+                if (q.isEmpty()) {
+                    item(key = "search-hint") { SearchHint() }
+                } else {
+                    item(key = "search-count") {
+                        SectionTitle(
+                            if (results.isEmpty()) "没有匹配的视频" else "找到 ${results.size} 个视频",
+                        )
+                    }
+                    if (results.isEmpty()) {
+                        item(key = "search-empty") { NoResultState(q) }
+                    } else {
+                        itemsIndexed(results, key = { _, hit -> "s-${hit.video.id}" }) { _, hit ->
+                            SearchResultRow(
                                 container = container,
-                                video = video,
-                                progress = item,
+                                folderName = hit.folder.name,
+                                video = hit.video,
+                                query = q,
+                                progress = progress[hit.video.id],
+                                autoResume = prefs.autoResume,
+                                playing = container.player.currentVideoId == hit.video.id,
                                 onClick = {
-                                    val folder = folders.firstOrNull { it.id == video.folderId }
-                                    val queue = folder?.videos ?: listOf(video)
-                                    val index = queue.indexOfFirst { it.id == video.id }.coerceAtLeast(0)
-                                    container.player.play(queue, index, item.positionMs)
+                                    val index = hit.folder.videos
+                                        .indexOfFirst { it.id == hit.video.id }
+                                        .coerceAtLeast(0)
+                                    val startAt = if (prefs.autoResume) {
+                                        progress[hit.video.id]?.takeIf { it.isResumable }?.positionMs ?: 0L
+                                    } else {
+                                        0L
+                                    }
+                                    container.player.play(hit.folder.videos, index, startAt)
                                     onOpenPlayer()
                                 },
                             )
                         }
                     }
                 }
-            }
-
-            if (folders.isNotEmpty()) {
-                item(key = "library-title") {
-                    SectionTitle("视频库")
+            } else {
+                if (folders.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyState(onAddFolder = { picker.launch(null) })
+                    }
                 }
-            }
 
-            folders.forEach { folder ->
-                item(key = "folder-${folder.id}") {
-                    FolderHeader(
-                        folder = folder,
-                        expanded = expanded[folder.id] == true,
-                        probing = folder.id in probing,
-                        onToggle = { expanded[folder.id] = expanded[folder.id] != true },
-                        onRescan = {
-                            scope.launch {
-                                val count = container.library.rescan(folder.id)
-                                Toast.makeText(context, "「${folder.name}」共 $count 个视频", Toast.LENGTH_SHORT).show()
+                if (resumable.isNotEmpty()) {
+                    item(key = "resume-title") {
+                        SectionTitle("继续观看")
+                    }
+                    item(key = "resume-row") {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp),
+                        ) {
+                            items(resumable, key = { it.first.id }) { (video, item) ->
+                                ResumeCard(
+                                    container = container,
+                                    video = video,
+                                    progress = item,
+                                    onClick = {
+                                        val folder = folders.firstOrNull { it.id == video.folderId }
+                                        val queue = folder?.videos ?: listOf(video)
+                                        val index = queue.indexOfFirst { it.id == video.id }.coerceAtLeast(0)
+                                        container.player.play(queue, index, item.positionMs)
+                                        onOpenPlayer()
+                                    },
+                                )
                             }
-                        },
-                        onRemove = { pendingRemoval = folder },
-                    )
-                }
-
-                if (expanded[folder.id] == true) {
-                    // 展开时才去补时长：上千个视频逐个开 MediaMetadataRetriever 太慢，
-                    // 放在扫描阶段会让「添加目录」卡住。
-                    // 注意：LaunchedEffect 不能直接写在 LazyListScope 的 builder 里
-                    //（那里不是 @Composable 上下文），所以借一个零高度的 item 来挂。
-                    item(key = "probe-${folder.id}") {
-                        LaunchedEffect(folder.id) {
-                            container.library.probeDurations(folder.id)
                         }
                     }
-                    itemsIndexed(folder.videos, key = { _, video -> "v-${video.id}" }) { index, video ->
-                        VideoRow(
-                            container = container,
-                            video = video,
-                            progress = progress[video.id],
-                            autoResume = prefs.autoResume,
-                            playing = container.player.currentVideoId == video.id,
-                            onClick = {
-                                val startAt = if (prefs.autoResume) {
-                                    progress[video.id]?.takeIf { it.isResumable }?.positionMs ?: 0L
-                                } else {
-                                    0L
+                }
+
+                if (folders.isNotEmpty()) {
+                    item(key = "library-title") {
+                        SectionTitle("视频库")
+                    }
+                }
+
+                folders.forEach { folder ->
+                    item(key = "folder-${folder.id}") {
+                        FolderHeader(
+                            folder = folder,
+                            expanded = expanded[folder.id] == true,
+                            probing = folder.id in probing,
+                            onToggle = { expanded[folder.id] = expanded[folder.id] != true },
+                            onRescan = {
+                                scope.launch {
+                                    val count = container.library.rescan(folder.id)
+                                    Toast.makeText(context, "「${folder.name}」共 $count 个视频", Toast.LENGTH_SHORT).show()
                                 }
-                                container.player.play(folder.videos, index, startAt)
-                                onOpenPlayer()
                             },
+                            onRemove = { pendingRemoval = folder },
                         )
+                    }
+
+                    if (expanded[folder.id] == true) {
+                        // 展开时才去补时长：上千个视频逐个开 MediaMetadataRetriever 太慢，
+                        // 放在扫描阶段会让「添加目录」卡住。
+                        // 注意：LaunchedEffect 不能直接写在 LazyListScope 的 builder 里
+                        //（那里不是 @Composable 上下文），所以借一个零高度的 item 来挂。
+                        item(key = "probe-${folder.id}") {
+                            LaunchedEffect(folder.id) {
+                                container.library.probeDurations(folder.id)
+                            }
+                        }
+                        itemsIndexed(folder.videos, key = { _, video -> "v-${video.id}" }) { index, video ->
+                            VideoRow(
+                                container = container,
+                                video = video,
+                                progress = progress[video.id],
+                                autoResume = prefs.autoResume,
+                                playing = container.player.currentVideoId == video.id,
+                                onClick = {
+                                    val startAt = if (prefs.autoResume) {
+                                        progress[video.id]?.takeIf { it.isResumable }?.positionMs ?: 0L
+                                    } else {
+                                        0L
+                                    }
+                                    container.player.play(folder.videos, index, startAt)
+                                    onOpenPlayer()
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -282,54 +371,300 @@ private fun TopBar(
     folderCount: Int,
     videoCount: Int,
     scanning: Boolean,
+    searching: Boolean,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onToggleSearch: () -> Unit,
     onAddFolder: () -> Unit,
     onRescanAll: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val palette = LocalNeuPalette.current
+    val focusRequester = remember { FocusRequester() }
+
+    // 进搜索模式就自动聚焦、弹键盘。
+    // 等一小会儿再 requestFocus：节点要先挂到窗口上，否则会抛
+    // "FocusRequester is not initialized"。
+    LaunchedEffect(searching) {
+        if (searching) {
+            delay(150)
+            focusRequester.requestFocus()
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "轻影",
-                    color = palette.textPrimary,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = if (scanning) "正在扫描…" else "$folderCount 个文件夹 · $videoCount 个视频",
-                    color = palette.textSecondary,
-                    fontSize = 12.sp,
+        if (searching) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                NeuIconButton(onClick = onToggleSearch, size = 42.dp) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "退出搜索",
+                        tint = palette.textPrimary,
+                    )
+                }
+                SearchField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    focusRequester = focusRequester,
+                    modifier = Modifier.weight(1f).padding(end = 6.dp),
                 )
             }
-            NeuIconButton(onClick = onRescanAll, size = 42.dp) {
-                Icon(Icons.Rounded.Refresh, contentDescription = "重新扫描", tint = palette.textPrimary)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "轻影",
+                        color = palette.textPrimary,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (scanning) "正在扫描…" else "$folderCount 个文件夹 · $videoCount 个视频",
+                        color = palette.textSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+                NeuIconButton(onClick = onToggleSearch, size = 42.dp) {
+                    Icon(Icons.Rounded.Search, contentDescription = "搜索", tint = palette.textPrimary)
+                }
+                NeuIconButton(onClick = onRescanAll, size = 42.dp) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = "重新扫描", tint = palette.textPrimary)
+                }
+                NeuIconButton(onClick = onOpenSettings, size = 42.dp) {
+                    Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = palette.textPrimary)
+                }
             }
-            NeuIconButton(onClick = onOpenSettings, size = 42.dp) {
-                Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = palette.textPrimary)
+
+            NeuButton(
+                onClick = onAddFolder,
+                highlighted = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = null,
+                    tint = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "添加视频文件夹",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
+    }
+}
 
-        NeuButton(
-            onClick = onAddFolder,
-            highlighted = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-        ) {
-            Icon(
-                Icons.Rounded.Add,
-                contentDescription = null,
-                tint = androidx.compose.ui.graphics.Color.White,
-                modifier = Modifier.size(18.dp),
+/** 一个命中结果：视频 + 它所属的分组（列表里要标出「这是哪个文件夹的」）。 */
+private data class SearchHit(val folder: VideoFolder, val video: VideoItem)
+
+/**
+ * 搜索输入框。用 BasicTextField 而不是 Material 的 TextField ——
+ * 后者的容器、下划线、内边距都要一条条覆盖掉才能融进拟态风格，得不偿失。
+ */
+@Composable
+private fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalNeuPalette.current
+    val shape = RoundedCornerShape(14.dp)
+
+    Row(
+        modifier = modifier
+            .background(palette.surface, shape)
+            .neuInner(14.dp, palette, 4.dp)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Search,
+            contentDescription = null,
+            tint = palette.textSecondary,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            if (value.isEmpty()) {
+                Text("搜索文件名或子目录", color = palette.textSecondary, fontSize = 14.sp)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = TextStyle(color = palette.textPrimary, fontSize = 14.sp),
+                cursorBrush = SolidColor(palette.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
             )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = "添加视频文件夹",
-                color = androidx.compose.ui.graphics.Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
+        }
+        if (value.isNotEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "清空",
+                tint = palette.textSecondary,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onValueChange("") },
             )
         }
     }
+}
+
+@Composable
+private fun SearchHint() {
+    val palette = LocalNeuPalette.current
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Search,
+            contentDescription = null,
+            tint = palette.textSecondary,
+            modifier = Modifier.size(44.dp),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("输入关键词开始搜索", color = palette.textPrimary, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "按文件名或子目录匹配，忽略大小写。\n搜索范围是全部已添加文件夹里的视频。",
+            color = palette.textSecondary,
+            fontSize = 12.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun NoResultState(query: String) {
+    val palette = LocalNeuPalette.current
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.VideoLibrary,
+            contentDescription = null,
+            tint = palette.textSecondary,
+            modifier = Modifier.size(44.dp),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("没有找到「$query」", color = palette.textPrimary, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "换个关键词试试。只匹配文件名与子目录，不匹配文件夹名。",
+            color = palette.textSecondary,
+            fontSize = 12.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * 搜索结果行。与 [VideoRow] 的区别：多一行「所属文件夹」，标题里高亮命中片段。
+ * 播放队列仍是该视频所在的整个文件夹，所以播完会自动连播同目录的下一集。
+ */
+@Composable
+private fun SearchResultRow(
+    container: AppContainer,
+    folderName: String,
+    video: VideoItem,
+    query: String,
+    progress: PlayProgress?,
+    autoResume: Boolean,
+    playing: Boolean,
+    onClick: () -> Unit,
+) {
+    val palette = LocalNeuPalette.current
+    val fraction = if (autoResume) progress?.fraction ?: 0f else 0f
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        VideoThumbnail(
+            loader = container.thumbnails,
+            uri = video.uri,
+            modifier = Modifier.width(104.dp),
+            cornerRadius = 8.dp,
+            badge = video.durationMs.takeIf { it > 0 }?.let { formatDuration(it) },
+        )
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            HighlightedTitle(
+                text = video.title,
+                query = query,
+                color = if (playing) palette.accent else palette.textPrimary,
+                highlightColor = palette.accent,
+                fontWeight = if (playing) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = buildString {
+                    append(folderName)
+                    video.relPath.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }
+                        ?.let { append(" / $it") }
+                    append(" · ${video.ext.uppercase()}")
+                    if (video.size > 0) append(" · ${formatSize(video.size)}")
+                },
+                color = palette.textSecondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (fraction > 0.01f) {
+                Spacer(Modifier.height(5.dp))
+                NeuProgress(progress = fraction, height = 3.dp)
+            }
+        }
+    }
+}
+
+/** 把标题里命中 [query] 的那一段染成强调色，只高亮第一处。 */
+@Composable
+private fun HighlightedTitle(
+    text: String,
+    query: String,
+    color: androidx.compose.ui.graphics.Color,
+    highlightColor: androidx.compose.ui.graphics.Color,
+    fontWeight: FontWeight,
+) {
+    val annotated = remember(text, query, color, highlightColor, fontWeight) {
+        buildAnnotatedString {
+            val index = text.indexOf(query, ignoreCase = true)
+            if (query.isBlank() || index < 0) {
+                append(text)
+                return@buildAnnotatedString
+            }
+            append(text.substring(0, index))
+            withStyle(SpanStyle(color = highlightColor, fontWeight = FontWeight.Bold)) {
+                append(text.substring(index, index + query.length))
+            }
+            append(text.substring(index + query.length))
+        }
+    }
+    Text(
+        text = annotated,
+        color = color,
+        fontSize = 14.sp,
+        fontWeight = fontWeight,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
