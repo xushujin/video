@@ -1,0 +1,11 @@
+Added A-B repeat: pick a segment and loop it.
+
+* Mark the start with A and the end with B while the video plays; the loop starts
+  as soon as both points are set
+* Marking only B loops from the beginning of the video to that point
+* A bar under the progress bar shows the looping segment, and the top bar shows
+  when a loop is active
+* The A-B panel shows both times (tap one to jump there), a loop switch, and a
+  way to clear the points. It works in portrait and landscape
+* The loop belongs to the current video only and is cleared when the next episode
+  starts; it is not saved to your resume positions

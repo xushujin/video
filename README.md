@@ -3,10 +3,10 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.2.0**（`versionCode = 3`，`versionName = "1.2.0"`，tag `v1.2.0`）
+- 版本 **v1.3.0**（`versionCode = 4`，`versionName = "1.3.0"`，tag `v1.3.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 22 个 Kotlin 文件、约 4000 行
-- release APK 约 **2.3 MB**
+- 23 个 Kotlin 文件、约 4900 行
+- release APK 约 **2.2 MB**
 
 ---
 
@@ -72,7 +72,24 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 计时器挂在 Application 级作用域上，切后台、息屏、离开播放页都照常走。
 顶栏胶囊实时显示剩余 `mm:ss`，一眼可见。
 
-### 4. 播放
+### 4. 片段循环（A-B 重复播放）
+
+想反复看同一段（练听力、对动作、听副歌）时，不用手动拖进度条。
+
+- 播放页控件里三个小键：**设 A** / **设 B** / **清除**。播到起点点 A、到终点点 B，
+  两点齐了立刻开始循环
+- 只点「设 B」也行 —— A 默认取 0，也就是「从开头循环到这里」
+- 进度条下面会多出一条 **A-B 区间条**，标出正在循环的那一段；顶栏胶囊显示「循环中」
+- 顶栏的 **A-B 胶囊**打开面板：两个时间点（点一下跳过去）、循环开关、清除。
+  竖屏横屏都能用 —— 横屏没地方塞标记键，就从面板里设
+- 循环只对**当前视频**有效，切到下一集自动清除；A/B 不写入播放记录
+- 实现是 50ms 轮询位置、越过 B 点就 `seekTo(A)`：ExoPlayer 没有「到达某位置」的回调，
+  而循环区间是临时状态，不值得为它重建 `ClippingConfiguration`。代价是每圈可能
+  过冲几十毫秒
+- B 点距结尾不足 300ms 时自动往前让一点：否则播放器先走到 `STATE_ENDED` 自动切下一集，
+  循环会断在半路上
+
+### 5. 播放
 
 - 整张列表当播放队列，自动连播；上一集 / 下一集 / 快进快退 15 秒
 - 进度条可拖动，倍速 0.5x–3x（7 档），默认倍速可在设置里改
@@ -83,7 +100,7 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **横竖屏都支持**：竖屏竖排控件；横屏自动切**沉浸式**（隐藏状态栏/导航栏）+ 单行紧凑控件。
   横屏纵向只有 300–400dp，照竖屏堆四行控件会把画面挤掉一大半，所以横屏是独立布局
 
-### 5. 防熄屏
+### 6. 防熄屏
 
 需求本身是矛盾的：看视频时不能灭屏，只听声音时又必须允许灭屏（否则亮一整夜）。
 
@@ -97,7 +114,7 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 后台时画面已经摘掉、视频轨道也关了（见上一节），剩下的就是纯音频，
 本来就不需要屏幕陪着亮。用 Window flag 实现，**不需要 WAKE_LOCK 权限**。
 
-### 6. 外观
+### 7. 外观
 
 - 拟态（Neumorphism）风格，与同系列项目一致
 - 外壳（列表 / 设置）**默认浅色**，可在设置里切深色，选择会被记住
@@ -141,6 +158,7 @@ video/
         │   ├── home/HomeScreen.kt      # 分组列表 + 继续观看 + 迷你播放条
         │   ├── player/
         │   │   ├── PlayerScreen.kt     # 画面 / 横竖屏控件 / 生命周期 / 防熄屏
+        │   │   ├── SegmentLoopPanel.kt # 片段循环面板（A/B 点、循环开关）
         │   │   └── SleepTimerPanel.kt  # 倒计时面板（预设 + 自定义）
         │   └── settings/SettingsScreen.kt
         └── util/
@@ -165,30 +183,30 @@ video/
 ### 命令行
 
 ```bash
-cd /Users/wisdom/workbuddy-ai/video
+cd video   # 仓库根目录
 
-export JAVA_HOME="$HOME/.workbuddy-ai/toolchain/jdk-17.0.20.1+1/Contents/Home"
-export ANDROID_HOME="$HOME/.android-build/android-sdk"
+export JAVA_HOME="/path/to/jdk-17"          # JDK 17+（AGP 9.4.1 要求）
+export ANDROID_HOME="/path/to/android-sdk"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 ./gradlew :app:assembleRelease   # 2.3 MB，装机用
 ./gradlew :app:assembleDebug     # 23 MB，含完整符号，便于看崩溃堆栈
 ```
 
-> 上面两个路径是本机工具链位置。其他人用 Android Studio 自带的 JDK/SDK，
-> 或在 `local.properties` 里写 `sdk.dir=/path/to/Android/sdk` 即可。
+> 上面两个路径换成你自己的 JDK / SDK 安装位置，或在 `local.properties` 里写
+> `sdk.dir=/path/to/Android/sdk`。`local.properties` 不入库。
 
 产物：
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.2.0-release.apk` | **2.3 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.2.0-debug.apk` | 23 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.3.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.3.0-debug.apk` | 23 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.2.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.3.0-release.apk
 ```
 
 ### 签名
@@ -209,8 +227,8 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.2.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.2.0  # 推上去即触发编译
+git tag v1.3.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.3.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
@@ -351,6 +369,9 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **缩略图不落盘**，只做内存缓存（16 MB LRU）；每次冷启动都要重新取帧。
 - **扫描上限 3000 个文件 / 8 层深度**，超出部分不收录（`VideoScanner` 里的常量）。
 - 应用**不跟随系统深色模式**，外壳配色由 App 内设置控制。
+- **片段循环不是逐帧精确的**：靠 50ms 轮询位置再 `seekTo`，每圈可能过冲几十毫秒；
+  片段本身也不落盘，切到别的视频就清除（同一次观看里退出播放页再回来仍然保留）。
+- **循环期间「播完当前视频后」的倒计时不会触发** —— 视频永远播不完，这是语义上的必然。
 
 ---
 
@@ -370,6 +391,10 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   未配 `KEYSTORE_BASE64` → 退出码 1、不写任何 env；
   **以及真实 CI 产物**：配好 Secret 后重打 tag，从 GitHub Release 下载附件验签，
   签名 `CN=QingYing`、指纹 `3fa551ff…17ec`，与本地构建一致
+- **v1.3.0（片段循环）**：`./gradlew :app:assembleRelease` 通过，
+  含 `lintVitalRelease` 与 R8 压缩；产物 `QingYing-1.3.0-release.apk` 2.2 MB。
+  该次构建在**没有签名密钥**的机器上完成，`apksigner verify` 报
+  `Missing META-INF/MANIFEST.MF`（未签名），与 F-Droid 路径的预期一致
 
 **未验证：**
 
@@ -377,9 +402,13 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - 各种封装格式的实际解码表现（尤其是 mkv 内封字幕、HEVC、RMVB）
 - 后台播放在不同厂商 ROM 上的保活表现（国产 ROM 对前台服务有额外限制）
 - 横屏沉浸式在挖孔屏 / 手势导航设备上的实际表现
+- **片段循环的听感**：每圈回跳时是否有一帧黑场、长片段连续循环几十圈后是否累积漂移
+- 片段循环的 50ms 轮询在低端机上的额外功耗（相对正常 200ms 轮询）
 
 建议装机后重点确认这几处：
 
+- **片段循环**：播到中间点「设 A」，再播几秒点「设 B」→ 应立刻跳回 A 继续播；
+  进度条下方应出现区间条；点「循环关」应停止回跳但保留 A/B；切下一集后 A/B 应清空
 - **进度条**：按住拖动、松手 → 应跳到目标位置；单击轨道 → 也应跳过去
 - **横竖屏**：播放中旋转 → 画面与播放位置都不能断；横屏应自动隐藏系统栏
 - **防熄屏**：播放页停住不动，超过系统熄屏时间 → 屏幕不应灭；

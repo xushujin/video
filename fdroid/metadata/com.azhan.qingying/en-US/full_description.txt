@@ -22,6 +22,8 @@ already on your phone. No account, no network, no ads, no runtime permissions.
 * Sleep timer: presets from 5 to 120 minutes, a custom number of minutes, or
   "when this video ends". At zero it either pauses playback or exits the app
 * Speed from 0.5x to 3x, drag to seek, or jump 15 seconds back and forward
+* A-B repeat: mark a start and an end point to loop that segment, with the range
+  drawn under the progress bar
 * Previous and next move through the queue, which is the folder you opened
 * Per-video resume positions, plus a "Continue watching" row on the home screen
 * Portrait and landscape layouts; landscape hides the system bars for a full

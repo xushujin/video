@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Timer
@@ -111,12 +112,13 @@ fun PlayerScreen(
     var surfaceView by remember { mutableStateOf<SurfaceView?>(null) }
     var controlsVisible by remember { mutableStateOf(true) }
     var showSleepPanel by remember { mutableStateOf(false) }
+    var showLoopPanel by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
-    // 控件自动隐藏：播放中 4 秒无操作就收起来；暂停时、拖进度条时、开着倒计时面板时不收
-    LaunchedEffect(controlsVisible, player.isPlaying, showSleepPanel, dragging) {
-        if (controlsVisible && player.isPlaying && !showSleepPanel && !dragging) {
+    // 控件自动隐藏：播放中 4 秒无操作就收起来；暂停时、拖进度条时、开着任一面板时不收
+    LaunchedEffect(controlsVisible, player.isPlaying, showSleepPanel, showLoopPanel, dragging) {
+        if (controlsVisible && player.isPlaying && !showSleepPanel && !showLoopPanel && !dragging) {
             delay(4_000)
             controlsVisible = false
         }
@@ -260,9 +262,22 @@ fun PlayerScreen(
                         else -> "倒计时"
                     },
                     sleepActive = timer.active,
+                    loopLabel = when {
+                        player.loopActive -> "循环中"
+                        player.loopReady -> "A-B 已设"
+                        else -> "A-B"
+                    },
+                    loopActive = player.loopActive,
                     compact = isLandscape,
                     onBack = onBack,
-                    onSleepClick = { showSleepPanel = !showSleepPanel },
+                    onSleepClick = {
+                        showSleepPanel = !showSleepPanel
+                        showLoopPanel = false
+                    },
+                    onLoopClick = {
+                        showLoopPanel = !showLoopPanel
+                        showSleepPanel = false
+                    },
                 )
 
                 Column(
@@ -307,6 +322,21 @@ fun PlayerScreen(
                         )
                     }
                 }
+
+                if (showLoopPanel) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        SegmentLoopPanel(
+                            player = player,
+                            onClose = { showLoopPanel = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
         }
     }
@@ -328,9 +358,12 @@ private fun TopBar(
     subtitle: String?,
     sleepLabel: String,
     sleepActive: Boolean,
+    loopLabel: String,
+    loopActive: Boolean,
     compact: Boolean,
     onBack: () -> Unit,
     onSleepClick: () -> Unit,
+    onLoopClick: () -> Unit,
 ) {
     val palette = LocalNeuPalette.current
     Row(
@@ -368,28 +401,55 @@ private fun TopBar(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (sleepActive) palette.accent else palette.surface.copy(alpha = 0.85f))
-                .clickable(onClick = onSleepClick)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = if (sleepActive) Icons.Rounded.Timer else Icons.Rounded.TimerOff,
-                contentDescription = null,
-                tint = if (sleepActive) Color.White else palette.textPrimary,
-                modifier = Modifier.size(15.dp),
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(
-                text = sleepLabel,
-                color = if (sleepActive) Color.White else palette.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = if (sleepActive) FontWeight.SemiBold else FontWeight.Normal,
-            )
-        }
+        TopCapsule(
+            icon = if (sleepActive) Icons.Rounded.Timer else Icons.Rounded.TimerOff,
+            label = sleepLabel,
+            active = sleepActive,
+            compact = compact,
+            onClick = onSleepClick,
+        )
+        Spacer(Modifier.width(6.dp))
+        TopCapsule(
+            icon = Icons.Rounded.Repeat,
+            label = loopLabel,
+            active = loopActive,
+            compact = compact,
+            onClick = onLoopClick,
+        )
+    }
+}
+
+/** 顶栏胶囊按钮。倒计时与片段循环共用，保证两处的尺寸、配色一致。 */
+@Composable
+private fun TopCapsule(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    compact: Boolean,
+    onClick: () -> Unit,
+) {
+    val palette = LocalNeuPalette.current
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (active) palette.accent else palette.surface.copy(alpha = 0.85f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (active) Color.White else palette.textPrimary,
+            modifier = Modifier.size(15.dp),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = label,
+            color = if (active) Color.White else palette.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
@@ -420,6 +480,14 @@ private fun PortraitControls(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // 进度条下面标出 A-B 区间，一眼能看出在循环哪一段
+        LoopRangeBar(
+            player = player,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+        )
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = formatDuration(shown.toLong()),
@@ -438,6 +506,10 @@ private fun PortraitControls(
                 fontSize = 11.sp,
             )
         }
+
+        Spacer(Modifier.height(6.dp))
+
+        LoopMarkRow(player = player)
 
         Spacer(Modifier.height(10.dp))
 
@@ -507,6 +579,106 @@ private fun PortraitControls(
         }
     }
 }
+
+/**
+ * A-B 区间条：贴在进度条下面，标出正在循环的那一段。
+ * 没设片段时整条不占位 —— 不留一条没有意义的空轨。
+ */
+@Composable
+private fun LoopRangeBar(player: PlaybackController, modifier: Modifier = Modifier) {
+    val palette = LocalNeuPalette.current
+    val duration = player.durationMs
+    if (!player.loopReady || duration <= 0L) return
+
+    val startFraction = (player.loopStartMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    val endFraction = (player.loopEndMs.toFloat() / duration.toFloat()).coerceIn(startFraction, 1f)
+
+    Box(
+        modifier = modifier
+            .height(3.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(palette.divider),
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            // weight 只接受正数，用极小值代表「贴在最左端」
+            Spacer(Modifier.weight(startFraction.coerceAtLeast(0.0001f)))
+            Box(
+                modifier = Modifier
+                    .weight((endFraction - startFraction).coerceAtLeast(0.0001f))
+                    .fillMaxHeight()
+                    .background(if (player.loopActive) palette.accent else palette.textSecondary),
+            )
+            Spacer(Modifier.weight((1f - endFraction).coerceAtLeast(0.0001f)))
+        }
+    }
+}
+
+/**
+ * 片段标记行：播到起点点「A」、到终点点「B」，两点齐了自动开始循环。
+ * 点「循环中」可以临时关掉（A/B 保留），点「清除」把两点都清掉。
+ */
+@Composable
+private fun LoopMarkRow(player: PlaybackController) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LoopChip(
+            label = if (player.loopStartMs >= 0L) "A ${formatMark(player.loopStartMs)}" else "设 A",
+            active = player.loopStartMs >= 0L,
+            onClick = { player.markLoopStart() },
+        )
+        LoopChip(
+            label = if (player.loopEndMs >= 0L) "B ${formatMark(player.loopEndMs)}" else "设 B",
+            active = player.loopEndMs >= 0L,
+            onClick = { player.markLoopEnd() },
+        )
+        if (player.loopReady) {
+            LoopChip(
+                label = if (player.loopActive) "循环中" else "循环关",
+                active = player.loopActive,
+                onClick = { player.setLooping(!player.loopActive) },
+            )
+            LoopChip(
+                label = "清除",
+                active = false,
+                onClick = { player.clearLoop() },
+            )
+        }
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun LoopChip(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val palette = LocalNeuPalette.current
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (active) palette.accent else palette.surface.copy(alpha = 0.7f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (active) Color.White else palette.textSecondary,
+            fontSize = 11.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 片段点位的时间文本。
+ * 0 点要显示 `0:00` —— [formatDuration] 对 <=0 返回 `--:--`，那是给「未知时长」用的。
+ */
+private fun formatMark(ms: Long): String = if (ms <= 0L) "0:00" else formatDuration(ms)
 
 /**
  * 横屏控件：压成一行。

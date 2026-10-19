@@ -90,6 +90,31 @@ class PlaybackController(private val context: Context) {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    // ------------------------------------------------------------ 片段循环
+    //
+    // A 点 / B 点都是「当前视频内」的毫秒位置，[NO_LOOP] 表示没设。
+    // 不落盘：片段是临时意图，跟着一次观看走；换视频就作废。
+
+    var loopStartMs by mutableLongStateOf(NO_LOOP)
+        private set
+
+    var loopEndMs by mutableLongStateOf(NO_LOOP)
+        private set
+
+    /** 两点都设好了才算「可用」；[loopEnabled] 是用户是否让它真的循环。 */
+    val loopReady: Boolean
+        get() = loopStartMs >= 0L && loopEndMs > loopStartMs
+
+    var loopEnabled by mutableStateOf(false)
+        private set
+
+    /** 循环生效中。轮询与 UI 都看这个。 */
+    val loopActive: Boolean
+        get() = loopEnabled && loopReady
+
+    /** 片段所属的视频 id —— 切到别的视频时据此作废，避免把 A/B 套到下一集上。 */
+    private var loopVideoId: String? = null
+
     /** 切到另一个视频时回调（含手动选集与自动连播）。 */
     var onVideoChanged: ((String?) -> Unit)? = null
 
@@ -111,6 +136,8 @@ class PlaybackController(private val context: Context) {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             // 换了片子就把上一条的错误清掉，否则「上一个文件播不了」的提示会一直挂在屏幕上
             errorMessage = null
+            // 片段循环只在「设它的那个视频」里成立，切走就作废
+            if (loopVideoId != null && loopVideoId != mediaItem?.mediaId) clearLoop()
             currentVideoId = mediaItem?.mediaId
             positionMs = 0L
             durationMs = controller?.duration?.takeIf { it > 0 } ?: 0L
@@ -256,6 +283,60 @@ class PlaybackController(private val context: Context) {
         seekTo(target)
     }
 
+    // ------------------------------------------------------------ 片段循环
+
+    /** 以当前位置设 A 点。A 点跑到原 B 点之后时，原来的 B 点作废。 */
+    fun markLoopStart() {
+        val position = currentPositionMs()
+        loopStartMs = position
+        loopVideoId = currentVideoId
+        if (loopEndMs >= 0L && loopEndMs <= position) loopEndMs = NO_LOOP
+        loopEnabled = loopReady
+    }
+
+    /**
+     * 以当前位置设 B 点。
+     *
+     * 没设 A 时默认从 0 开始 ——「从开头循环到这里」是常见用法，不必先点 A。
+     * B 点贴着结尾时会往前留 [LOOP_END_GUARD_MS]：播放器一旦走到 STATE_ENDED
+     * 就会自动切下一集，循环会断在半路上。
+     */
+    fun markLoopEnd() {
+        val duration = knownDurationMs()
+        val limit = if (duration > 0L) {
+            (duration - LOOP_END_GUARD_MS).coerceAtLeast(0L)
+        } else {
+            Long.MAX_VALUE
+        }
+        var end = currentPositionMs().coerceAtMost(limit)
+        val start = if (loopStartMs >= 0L && loopStartMs < end) loopStartMs else 0L
+        // 两点挨得太近（或者 B 点落在 A 点之前）时，至少留出 MIN_LOOP_MS
+        if (end - start < MIN_LOOP_MS) {
+            end = (start + MIN_LOOP_MS).coerceAtMost(limit)
+        }
+        loopStartMs = start
+        loopEndMs = end
+        loopVideoId = currentVideoId
+        loopEnabled = end > start
+    }
+
+    /**
+     * 开关循环。
+     *
+     * 方法名不能叫 `setLoopEnabled` —— 那会和 `loopEnabled` 属性的 setter
+     * 撞同一个 JVM 签名（`setLoopEnabled(Z)V`），编译期直接报 declaration clash。
+     */
+    fun setLooping(enabled: Boolean) {
+        loopEnabled = enabled && loopReady
+    }
+
+    fun clearLoop() {
+        loopStartMs = NO_LOOP
+        loopEndMs = NO_LOOP
+        loopEnabled = false
+        loopVideoId = null
+    }
+
     fun applySpeed(value: Float) {
         val clamped = value.coerceIn(MIN_SPEED, MAX_SPEED)
         speed = clamped
@@ -276,6 +357,7 @@ class PlaybackController(private val context: Context) {
         controller?.stop()
         controller?.clearMediaItems()
         currentVideoId = null
+        clearLoop()
         stopTicker()
     }
 
@@ -317,6 +399,16 @@ class PlaybackController(private val context: Context) {
 
     // ------------------------------------------------------------ 内部
 
+    /** 当前位置。控制器还没连上时退回最后一次镜像的值。 */
+    private fun currentPositionMs(): Long =
+        (controller?.currentPosition ?: positionMs).coerceAtLeast(0L)
+
+    /** 时长。播放器没准备好时退回列表里探测到的值。 */
+    private fun knownDurationMs(): Long {
+        val fromController = controller?.duration ?: 0L
+        return if (fromController > 0L) fromController else durationMs
+    }
+
     private fun syncFrom(mediaController: MediaController) {
         currentVideoId = mediaController.currentMediaItem?.mediaId
         isPlaying = mediaController.isPlaying
@@ -343,7 +435,16 @@ class PlaybackController(private val context: Context) {
         ticker = scope.launch {
             while (isActive) {
                 val mediaController = controller ?: break
-                positionMs = mediaController.currentPosition.coerceAtLeast(0L)
+                val position = mediaController.currentPosition.coerceAtLeast(0L)
+                // 片段循环：走到 B 点就跳回 A 点。
+                // 这里是轮询而不是监听播放器事件 —— ExoPlayer 没有「到达某位置」的回调，
+                // 循环区间又是临时状态，不值得为它重建 MediaItem 的 ClippingConfiguration。
+                if (loopActive && position >= loopEndMs) {
+                    mediaController.seekTo(loopStartMs)
+                    positionMs = loopStartMs
+                } else {
+                    positionMs = position
+                }
                 val duration = mediaController.duration
                 if (duration > 0 && duration != durationMs) durationMs = duration
                 val now = android.os.SystemClock.elapsedRealtime()
@@ -351,7 +452,8 @@ class PlaybackController(private val context: Context) {
                     lastProgressTickAt = now
                     flushProgress()
                 }
-                delay(200)
+                // 循环时轮询要更密：200ms 一圈会让每轮多播出去小半秒，几十圈后就明显跑偏。
+                delay(if (loopActive) LOOP_TICK_MS else POSITION_TICK_MS)
             }
         }
     }
@@ -387,6 +489,21 @@ class PlaybackController(private val context: Context) {
 
         /** 进度回写间隔：5 秒。 */
         private const val PROGRESS_TICK_MS = 5_000L
+
+        /** 普通状态下的位置轮询间隔。 */
+        private const val POSITION_TICK_MS = 200L
+
+        /** 片段循环生效时的轮询间隔。越密越不容易「冲过头」。 */
+        private const val LOOP_TICK_MS = 50L
+
+        /** 表示「没设 A/B 点」。 */
+        const val NO_LOOP = -1L
+
+        /** 片段最短 0.5 秒 —— 再短就成了卡顿，不是循环。 */
+        private const val MIN_LOOP_MS = 500L
+
+        /** B 点距结尾的余量，避免播放器先走到 ENDED 自动切集。 */
+        private const val LOOP_END_GUARD_MS = 300L
 
         /** 播放页提供的倍速档位。 */
         val SPEED_STEPS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f)
