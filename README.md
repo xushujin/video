@@ -395,6 +395,9 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   含 `lintVitalRelease` 与 R8 压缩；产物 `QingYing-1.3.0-release.apk` 2.2 MB。
   该次构建在**没有签名密钥**的机器上完成，`apksigner verify` 报
   `Missing META-INF/MANIFEST.MF`（未签名），与 F-Droid 路径的预期一致
+- **v1.3.0 的 CI 产物**：推 `v1.3.0` 后 `Build Release APK` 跑通，Release 附件
+  `QingYing-v1.3.0.apk`（2.2 MB）验签为 `CN=QingYing`、SHA-256 `3fa551ff…17ec` ——
+  与本地构建同一把钥匙，可以直接覆盖升级
 
 **未验证：**
 
