@@ -47,6 +47,10 @@ already on your phone. No account, no network, no ads, no runtime permissions.
 <b>Notes</b>
 * Whether an exotic codec plays depends on your device's decoders. Files that
   cannot be played report the actual error instead of silently showing black
+* If only the audio track cannot be decoded (common with MP2 audio inside AVI),
+  playback continues muted instead of stopping, and you are told once
+* RealMedia (.rmvb) is not supported at all - the container has no extractor and
+  phones have no RealVideo decoder, so those files need converting
 * Picture-in-picture is not implemented
 * The F-Droid build is signed with F-Droid's own key, so it cannot upgrade a
   copy installed from GitHub Releases - uninstall that copy first

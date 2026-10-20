@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.TimerOff
+import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -254,26 +255,79 @@ fun PlayerScreen(
         }
 
         // ---------------- 错误提示
-        player.errorMessage?.let { message ->
+        player.playbackError?.let { error ->
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(24.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(palette.surface.copy(alpha = 0.92f))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(palette.surface.copy(alpha = 0.95f))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 Column {
-                    Text("这个文件播不了", color = palette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
-                    Text(message, color = palette.textSecondary, fontSize = 11.sp)
+                    Text(
+                        text = error.title,
+                        color = palette.textPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = error.detail,
+                        color = palette.textSecondary,
+                        fontSize = 10.sp,
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "常见原因是编码不被设备支持（如部分 RMVB / 带 DRM 的文件）。",
+                        text = error.hint,
                         color = palette.textSecondary,
                         fontSize = 11.sp,
                     )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "知道了",
+                        color = palette.accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { player.clearError() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                 }
+            }
+        }
+
+        // ---------------- 一次性提示：音轨解不了自动静音时告诉用户一声
+        player.noticeMessage?.let { message ->
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 64.dp, start = 16.dp, end = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.surface.copy(alpha = 0.92f))
+                    .clickable { player.clearNotice() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.VolumeOff,
+                    contentDescription = null,
+                    tint = palette.accent,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(message, color = palette.textPrimary, fontSize = 11.sp)
+            }
+        }
+
+        // 6 秒后自动消失，点一下也能关
+        LaunchedEffect(player.noticeMessage) {
+            if (player.noticeMessage != null) {
+                delay(6_000)
+                player.clearNotice()
             }
         }
 

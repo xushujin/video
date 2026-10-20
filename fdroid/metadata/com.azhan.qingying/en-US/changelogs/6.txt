@@ -1,0 +1,10 @@
+Videos whose audio track cannot be decoded now play muted instead of failing.
+
+* Some AVI files carry MPEG-1 Layer II audio, which Android reports as supported
+  but then fails to decode - previously the whole video refused to play. Now the
+  audio track is disabled and the picture keeps going, with a short notice
+* The fallback applies to that one video only; the next episode gets its audio back
+* Error messages now say what actually broke - audio decoding, video decoding,
+  an unsupported container, or an unreadable file - and suggest what to do about it
+* RealMedia (.rmvb) still cannot be played: there is no extractor for that
+  container and phones have no RealVideo decoder. Convert those files first

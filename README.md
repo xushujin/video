@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.4.0**（`versionCode = 5`，`versionName = "1.4.0"`，tag `v1.4.0`）
+- 版本 **v1.5.0**（`versionCode = 6`，`versionName = "1.5.0"`，tag `v1.5.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 23 个 Kotlin 文件、约 4900 行
 - release APK 约 **2.2 MB**
@@ -102,6 +102,11 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **手动横屏切换**：进度条右侧（横屏时在右下角）一个全屏键，直接给 Activity 设
   `requestedOrientation` —— 系统「自动旋转」关着也能一键进/出横屏。
   离开播放页会把方向交还系统，不会把列表页也锁在横屏
+- **音轨解不了时自动静音续播**：AVI 里封 MP2 音轨这类「画面正常、音频解不了」的文件，
+  不再整片报错 —— 自动关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
+  只对当前视频生效，切到别的视频会把音频轨重新打开
+- **错误提示分类**：区分「音频解码失败 / 视频解码失败 / 容器不支持 / 文件读不到」，
+  每种给出对应建议（转码 / 重新扫描 / 重启），技术细节折叠在下面，不占主视线
 
 ### 6. 防熄屏
 
@@ -203,13 +208,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.4.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.4.0-debug.apk` | 23 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.5.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.5.0-debug.apk` | 23 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.4.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.5.0-release.apk
 ```
 
 ### 签名
@@ -230,8 +235,8 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.4.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.4.0  # 推上去即触发编译
+git tag v1.5.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.5.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
@@ -366,8 +371,13 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **零运行时权限**：目录走 SAF，防熄屏走 Window flag，都不需要权限。
   Android 13+ 不申请通知权限，代价是通知栏里没有播放控件（后台播放本身不受影响）。
 - **格式支持取决于设备解码器**。ExoPlayer 自带 mp4 / mkv / webm 的软解与封装支持，
-  但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器，
-  播不了会给出错误码而不是静默失败。
+  但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器。
+  播不了会给分类后的错误提示，不是静默黑屏。
+  - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2），MIME 同样是 `audio/mpeg`，
+    系统能力检查报「支持」但真解码时失败（`ERROR_CODE_DECODING_FAILED`）。
+    v1.5.0 起这种情况自动降级为静音播放，画面照常
+  - **RMVB 是真的不支持**：ExoPlayer 没有 RealMedia 提取器，手机也基本没有 RealVideo 解码器，
+    静音降级也救不回来，只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
 - **时长 / 分辨率探测是逐个文件做的**，超大目录首次展开会看到「正在读取时长…」停留一会儿。
 - **缩略图不落盘**，只做内存缓存（16 MB LRU）；每次冷启动都要重新取帧。
 - **扫描上限 3000 个文件 / 8 层深度**，超出部分不收录（`VideoScanner` 里的常量）。
@@ -406,6 +416,9 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **v1.4.0（手动横屏）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   CI Run 7 成功；Release 附件 `QingYing-v1.4.0.apk`（2.2 MB）验签同样是
   `CN=QingYing` / `3fa551ff…17ec`
+- **v1.5.0（音轨降级）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8）。
+  降级判定依赖 media3 报错文本里的渲染器类名（`MediaCodecAudioRenderer`），
+  属于实现细节耦合 —— 见下方「未验证」，没有真实 MP2 样本时不能算验证完成
 
 **未验证：**
 
@@ -416,9 +429,15 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **片段循环的听感**：每圈回跳时是否有一帧黑场、长片段连续循环几十圈后是否累积漂移
 - 片段循环的 50ms 轮询在低端机上的额外功耗（相对正常 200ms 轮询）
 - **手动横屏在平板 / 折叠屏 / 分屏模式下的表现**（这些场景系统可能忽略方向请求）
+- **音轨降级在真实文件上的表现**：本地没有 MP2/AC3 音轨的 AVI 样本，
+  判定逻辑（渲染器类名匹配）与「降级后能否继续播」都还没在真机复核
+- 错误分类对 `ERROR_CODE_*` 的映射是否覆盖了实际遇到的所有失败
 
 建议装机后重点确认这几处：
 
+- **音轨降级**：找一个音轨是 MP2 的 AVI → 应自动静音播放并提示一次，画面正常；
+  切到下一集后声音应恢复（不能一直是静音）
+- **错误分类**：放一个 RMVB → 应提示「容器不支持」而不是笼统的「编码不支持」
 - **手动横屏**：竖屏点全屏键 → 应立刻转横屏、播放位置不断；横屏点退出 → 回竖屏；
   返回列表页不应还卡在横屏
 - **片段循环**：播到中间点「设 A」，再播几秒点「设 B」→ 应立刻跳回 A 继续播；

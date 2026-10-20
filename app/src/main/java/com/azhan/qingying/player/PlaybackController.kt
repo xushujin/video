@@ -87,8 +87,21 @@ class PlaybackController(private val context: Context) {
     var videoAspect by mutableFloatStateOf(16f / 9f)
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
+    /** 播放失败。分类后的文案，UI 直接显示，不用再猜错误码。 */
+    var playbackError by mutableStateOf<PlaybackErrorInfo?>(null)
         private set
+
+    /** 一次性提示（如「音频解不了，已静音」），不阻塞播放。 */
+    var noticeMessage by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * 音轨已被判定为「解不了」的视频 id。
+     *
+     * 记下来是为了不再重试：同一个文件重试也不会突然能解，
+     * 反复失败只会让用户看到错误闪一下再静音。
+     */
+    private var audioDisabledVideoId: String? = null
 
     // ------------------------------------------------------------ 片段循环
     //
@@ -135,9 +148,16 @@ class PlaybackController(private val context: Context) {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             // 换了片子就把上一条的错误清掉，否则「上一个文件播不了」的提示会一直挂在屏幕上
-            errorMessage = null
+            playbackError = null
+            noticeMessage = null
             // 片段循环只在「设它的那个视频」里成立，切走就作废
             if (loopVideoId != null && loopVideoId != mediaItem?.mediaId) clearLoop()
+            // 上一条是「音轨解不了」才静音的，换到别的视频要把音轨打开，
+            // 否则后面所有视频都会莫名其妙没有声音。
+            if (audioDisabledVideoId != null && audioDisabledVideoId != mediaItem?.mediaId) {
+                audioDisabledVideoId = null
+                setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            }
             currentVideoId = mediaItem?.mediaId
             positionMs = 0L
             durationMs = controller?.duration?.takeIf { it > 0 } ?: 0L
@@ -151,7 +171,7 @@ class PlaybackController(private val context: Context) {
             playbackState = state
             val duration = controller?.duration ?: 0L
             if (duration > 0) durationMs = duration
-            if (state == Player.STATE_READY) errorMessage = null
+            if (state == Player.STATE_READY) playbackError = null
             if (state == Player.STATE_ENDED) {
                 stopTicker()
                 flushProgress()
@@ -178,7 +198,9 @@ class PlaybackController(private val context: Context) {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            errorMessage = error.errorCodeName + "：" + (error.message ?: "播放出错")
+            // 先试着降级：音轨解不了就把音轨关掉继续放画面，比整片报错有用得多
+            if (tryMuteAudioAndRetry(error)) return
+            playbackError = classify(error)
         }
     }
 
@@ -204,7 +226,11 @@ class PlaybackController(private val context: Context) {
                     pendingAction = null
                     action?.invoke()
                 } catch (t: Throwable) {
-                    errorMessage = t.message ?: "播放服务连接失败"
+                    playbackError = PlaybackErrorInfo(
+                        title = "播放服务连不上",
+                        detail = t.message ?: "MediaController 连接失败",
+                        hint = "退出应用重开一次；还不行就重启手机再试。",
+                    )
                     controllerFuture = null
                 }
             },
@@ -223,7 +249,11 @@ class PlaybackController(private val context: Context) {
     }
 
     fun clearError() {
-        errorMessage = null
+        playbackError = null
+    }
+
+    fun clearNotice() {
+        noticeMessage = null
     }
 
     // ------------------------------------------------------------ 播放控制
@@ -358,6 +388,9 @@ class PlaybackController(private val context: Context) {
         controller?.clearMediaItems()
         currentVideoId = null
         clearLoop()
+        // 队列清空了，之前因为音轨坏掉而关掉的音频要恢复，否则下一条也没声音
+        audioDisabledVideoId = null
+        setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
         stopTicker()
     }
 
@@ -388,11 +421,16 @@ class PlaybackController(private val context: Context) {
      */
     fun enableVideoTrack(enabled: Boolean) {
         videoTrackEnabled = enabled
+        setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !enabled)
+    }
+
+    /** 统一改轨道开关：只动指定的那一种轨道，另一种保持原状。 */
+    private fun setTrackTypeDisabled(trackType: Int, disabled: Boolean) {
         val mediaController = controller ?: return
         runCatching {
             mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
                 .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !enabled)
+                .setTrackTypeDisabled(trackType, disabled)
                 .build()
         }
     }
@@ -407,6 +445,129 @@ class PlaybackController(private val context: Context) {
     private fun knownDurationMs(): Long {
         val fromController = controller?.duration ?: 0L
         return if (fromController > 0L) fromController else durationMs
+    }
+
+    /**
+     * 音频轨解不了时的降级：关掉音频轨、回到原位置继续播。
+     *
+     * 要同时满足「解码类错误」+「来自音频渲染器」+「这个视频还没降级过」才接管，
+     * 返回 true 表示这次错误已经处理掉，调用方不用再弹错误卡片。
+     *
+     * 典型场景：AVI 里封装的是 MPEG-1 Layer II（MP2）音轨，MIME 同样是 audio/mpeg，
+     * 系统能力检查报「支持」，真解码时却失败 —— 视频轨其实完全正常。
+     */
+    private fun tryMuteAudioAndRetry(error: PlaybackException): Boolean {
+        val videoId = currentVideoId ?: return false
+        if (audioDisabledVideoId == videoId) return false
+        if (!isAudioTrackFailure(error)) return false
+
+        audioDisabledVideoId = videoId
+        playbackError = null
+        noticeMessage = "音频编码设备解不了，已静音播放（画面正常）"
+
+        val resumeAt = (controller?.currentPosition ?: positionMs).coerceAtLeast(0L)
+        scope.launch {
+            // 等播放器把错误状态收干净再 prepare：立刻重试大概率又拿到同一个错误
+            delay(120)
+            val mediaController = controller ?: return@launch
+            runCatching {
+                mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                    .build()
+                mediaController.prepare()
+                mediaController.seekTo(resumeAt)
+                mediaController.play()
+            }.onFailure { t ->
+                playbackError = PlaybackErrorInfo(
+                    title = "这个文件播不了",
+                    detail = t.message ?: "关掉音频轨后仍然失败",
+                    hint = "音频轨之外的部分也解不了，这个文件需要先转码。",
+                )
+            }
+        }
+        return true
+    }
+
+    /**
+     * 判断错误是不是「音频轨」的解码失败。
+     *
+     * PlaybackException 不直接说明哪条轨挂了，但 media3 的报错文本里带着渲染器类名
+     * （MediaCodecAudioRenderer / MediaCodecVideoRenderer）和 MIME（audio/mpeg）。
+     * 两边都出现时按视频处理 —— 宁可报错，也不要误把有画面的文件静音。
+     */
+    private fun isAudioTrackFailure(error: PlaybackException): Boolean {
+        val decodingFailure = when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
+            -> true
+
+            else -> false
+        }
+        if (!decodingFailure) return false
+
+        val text = buildString {
+            append(error.message.orEmpty())
+            append(' ')
+            append(error.cause?.message.orEmpty())
+        }
+        val audio = text.contains("AudioRenderer", ignoreCase = true) ||
+            text.contains("audio/", ignoreCase = true)
+        val video = text.contains("VideoRenderer", ignoreCase = true) ||
+            text.contains("video/", ignoreCase = true)
+        return audio && !video
+    }
+
+    /** 把 PlaybackException 翻成「标题 + 技术细节 + 建议」，别让用户对着错误码发呆。 */
+    private fun classify(error: PlaybackException): PlaybackErrorInfo {
+        val detail = buildString {
+            append(error.errorCodeName)
+            error.message?.let { append("：").append(it) }
+        }
+
+        if (isAudioTrackFailure(error)) {
+            return PlaybackErrorInfo(
+                title = "音频解码失败",
+                detail = detail,
+                hint = "设备没有能解这条音轨的解码器（AVI 里的 MP2、部分 AC3 常见）。转成 AAC 再播即可。",
+            )
+        }
+
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+            PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
+            -> PlaybackErrorInfo(
+                title = "读不到这个文件",
+                detail = detail,
+                hint = "文件可能已被移动或删除，或者目录授权失效了。回列表重新扫描一下试试。",
+            )
+
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+            -> PlaybackErrorInfo(
+                title = "这个文件播不了",
+                detail = detail,
+                hint = "容器或索引损坏，或者格式本身不被支持（RealMedia / RMVB 属于这类）。需要先转码。",
+            )
+
+            in 4001..4005 -> PlaybackErrorInfo(
+                title = "视频解码失败",
+                detail = detail,
+                hint = "设备没有能解这个视频编码的解码器（RMVB 的 RealVideo、部分 HEVC 10bit 常见）。需要先转码。",
+            )
+
+            else -> PlaybackErrorInfo(
+                title = "这个文件播不了",
+                detail = detail,
+                hint = "常见原因是编码不被设备支持（如 RMVB / 带 DRM 的文件），或者文件本身有问题。",
+            )
+        }
     }
 
     private fun syncFrom(mediaController: MediaController) {
@@ -509,3 +670,16 @@ class PlaybackController(private val context: Context) {
         val SPEED_STEPS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f)
     }
 }
+
+/**
+ * 播放失败的分类结果。
+ *
+ * @param title  一句话说清是什么坏了（音频？视频？容器？）
+ * @param detail 原始错误码与信息，便于排查，也给愿意细看的人看
+ * @param hint   该怎么办
+ */
+data class PlaybackErrorInfo(
+    val title: String,
+    val detail: String,
+    val hint: String,
+)
