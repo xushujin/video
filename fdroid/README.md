@@ -12,7 +12,7 @@ fdroid/metadata/
     ├── title.txt                              # 应用名
     ├── short_description.txt                  # 摘要（≤ 80 字符）
     ├── full_description.txt                   # 完整描述（≤ 4000 字符）
-    └── changelogs/1.txt                       # versionCode 1 的更新日志
+    └── changelogs/1.txt … 6.txt               # 每个 versionCode 一份更新日志
 ```
 
 与 fdroiddata 仓库的结构一致，整个 `metadata/` 目录可以直接复制过去。
@@ -77,7 +77,7 @@ F-Droid 的 CI 会自动跑构建检查，维护者会 review。
 | **应用图标** | 从 `app/src/main/res/` 导出 512×512 PNG，放到 `en-US/images/icon.png` |
 | **截图** | 建议 3–5 张（分组列表、播放页竖屏、播放页横屏、倒计时面板、设置页），放 `en-US/images/phoneScreenshots/1.png` 等 |
 | **作者名** | `.yml` 里现在填的是 GitHub 用户名 `xushujin`，想用真名自行替换 |
-| **每个新 versionCode 一份 changelog** | 否则 F-Droid 会用空白的更新说明（`changelogs/1.txt`、`2.txt`、`3.txt` 已就位） |
+| **每个新 versionCode 一份 changelog** | 否则 F-Droid 会用空白的更新说明（目前 `1.txt`–`6.txt` 已就位，对应 versionCode 1–6） |
 
 截图需要装机后自己截 —— 这是唯一我没法代劳的部分。
 
@@ -107,8 +107,8 @@ F-Droid 的 CI 会自动跑构建检查，维护者会 review。
 | 许可证 Apache-2.0 | ✅ `LICENSE` 已在仓库根目录 |
 | 零运行时权限 | ✅ 不申请任何权限；通知权限只声明不申请 |
 | 无专有依赖 | ✅ 全是 AndroidX / Media3 / Kotlin |
-| 无签名材料时可从源码构建 | ✅ **已实测**：从 `v1.2.0` tag 克隆干净检出（无密钥、无 `local.properties`），`:app:assembleRelease` 通过，产物 `QingYing-1.2.0-release.apk`，`apksigner verify` 报 `Missing META-INF/MANIFEST.MF`（即未签名，F-Droid 可直接重签） |
-| git tag | ✅ `v1.2.0` |
+| 无签名材料时可从源码构建 | ✅ **已实测**：`v1.2.0` 从 tag 克隆干净检出（无密钥、无 `local.properties`）构建通过；`v1.3.0`、`v1.5.0` 也在无密钥环境跑通 `:app:assembleRelease`。产物均未签名，`apksigner verify` 报 `Missing META-INF/MANIFEST.MF`（F-Droid 可直接重签） |
+| git tag | ✅ `v1.5.0` |
 | 元数据字段合法性 | ⚪ 未跑 `fdroid lint`（本机没装 fdroidserver）；已逐字段对照 [Build Metadata Reference](https://f-droid.org/docs/Build_Metadata_Reference/)，无自造字段 |
 | 应用图标 / 截图 | ❌ 缺 —— 见上文「还缺什么」，需要装机后自己截 |
 | 构建服务器支持 AGP 9.4.1 / compileSdk 37 | ⚪ 未验证，见上文 |

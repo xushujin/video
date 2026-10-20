@@ -5,7 +5,7 @@
 
 - 版本 **v1.5.0**（`versionCode = 6`，`versionName = "1.5.0"`，tag `v1.5.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 23 个 Kotlin 文件、约 4900 行
+- 23 个 Kotlin 文件、约 5200 行
 - release APK 约 **2.2 MB**
 
 ---
@@ -32,7 +32,9 @@
   - 不匹配文件夹名 —— 搜的是**列表里的文件**，不是分组
   - 纯内存过滤（上限 3000 个文件），不加防抖，敲一个字就出结果
   - 搜索时按系统返回键先退出搜索，不会直接退出应用
-- 缩略图取视频第 1 秒的帧（第 0 帧常是黑场），内存 LRU 缓存，不落盘
+- 缩略图：API 29+ 走系统 `ContentResolver.loadThumbnail`（自动降采样），
+  API 26–28 退回 `MediaMetadataRetriever.getFrameAtTime(1 秒)`（第 0 帧常是黑场）；
+  内存 LRU（16 MB），不落盘
 
 ### 2. 后台播放音频
 
@@ -76,8 +78,8 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 
 想反复看同一段（练听力、对动作、听副歌）时，不用手动拖进度条。
 
-- 播放页控件里三个小键：**设 A** / **设 B** / **清除**。播到起点点 A、到终点点 B，
-  两点齐了立刻开始循环
+- 播放页控件里一行小键：**设 A** / **设 B**，播到起点点 A、到终点点 B，
+  两点齐了立刻开始循环；循环生效后再出现 **循环中**（可临时关掉、A/B 保留）与 **清除**
 - 只点「设 B」也行 —— A 默认取 0，也就是「从开头循环到这里」
 - 进度条下面会多出一条 **A-B 区间条**，标出正在循环的那一段；顶栏胶囊显示「循环中」
 - 顶栏的 **A-B 胶囊**打开面板：两个时间点（点一下跳过去）、循环开关、清除。
@@ -93,7 +95,7 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 
 - 整张列表当播放队列，自动连播；上一集 / 下一集 / 快进快退 15 秒
 - 进度条可拖动，倍速 0.5x–3x（7 档），默认倍速可在设置里改
-- **播放进度记忆**：按视频单独记，退出、换设备都能续播（设置里可关自动续播）
+- **播放进度记忆**：按视频单独记，退出、重进都能续播（设置里可关自动续播）
 - 进度回写有防抖（停顿 800ms 才落盘），播放中每 5 秒回写一次
 - 画面按视频真实宽高比做 letterbox，处理了非方形像素（老 DVD 转码）与旋转元数据
 - 解不了的文件给出明确错误（含错误码名），不会静默黑屏
@@ -106,7 +108,7 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
   不再整片报错 —— 自动关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
   只对当前视频生效，切到别的视频会把音频轨重新打开
 - **错误提示分类**：区分「音频解码失败 / 视频解码失败 / 容器不支持 / 文件读不到」，
-  每种给出对应建议（转码 / 重新扫描 / 重启），技术细节折叠在下面，不占主视线
+  每种给出对应建议（转码 / 重新扫描 / 重启），原始错误码用小字放在下面，不占主视线
 
 ### 6. 防熄屏
 
@@ -120,7 +122,8 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 | 切后台 / 离开播放页 / 息屏 | 清掉该 flag，交还系统正常熄屏 |
 
 后台时画面已经摘掉、视频轨道也关了（见上一节），剩下的就是纯音频，
-本来就不需要屏幕陪着亮。用 Window flag 实现，**不需要 WAKE_LOCK 权限**。
+本来就不需要屏幕陪着亮。用 Window flag 实现，**防熄屏本身不需要 WAKE_LOCK** ——
+清单里那条 `WAKE_LOCK` 是给 ExoPlayer 后台解码用的（`setWakeMode(C.WAKE_MODE_LOCAL)`）。
 
 ### 7. 外观
 
@@ -197,8 +200,8 @@ export JAVA_HOME="/path/to/jdk-17"          # JDK 17+（AGP 9.4.1 要求）
 export ANDROID_HOME="/path/to/android-sdk"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-./gradlew :app:assembleRelease   # 2.3 MB，装机用
-./gradlew :app:assembleDebug     # 23 MB，含完整符号，便于看崩溃堆栈
+./gradlew :app:assembleRelease   # 2.2 MB，装机用
+./gradlew :app:assembleDebug     # 22 MB，含完整符号，便于看崩溃堆栈
 ```
 
 > 上面两个路径换成你自己的 JDK / SDK 安装位置，或在 `local.properties` 里写
@@ -209,7 +212,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 | 包 | 路径 | 体积 |
 |---|---|---|
 | release（推荐） | `app/build/outputs/apk/release/QingYing-1.5.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.5.0-debug.apk` | 23 MB |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.5.0-debug.apk` | 22 MB |
 
 装到手机：
 
@@ -242,7 +245,7 @@ git push origin v1.5.0  # 推上去即触发编译
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.2.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.5.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -278,7 +281,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.2.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.5.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
