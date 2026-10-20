@@ -416,9 +416,11 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **v1.4.0（手动横屏）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   CI Run 7 成功；Release 附件 `QingYing-v1.4.0.apk`（2.2 MB）验签同样是
   `CN=QingYing` / `3fa551ff…17ec`
-- **v1.5.0（音轨降级）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8）。
-  降级判定依赖 media3 报错文本里的渲染器类名（`MediaCodecAudioRenderer`），
-  属于实现细节耦合 —— 见下方「未验证」，没有真实 MP2 样本时不能算验证完成
+- **v1.5.0（音轨降级）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  CI Run 8 成功；Release 附件 `QingYing-v1.5.0.apk`（2.2 MB）验签为
+  `CN=QingYing` / `3fa551ff…17ec`。降级判定依赖 media3 报错文本里的渲染器类名
+  （`MediaCodecAudioRenderer`），属于实现细节耦合 —— 见下方「未验证」，
+  没有真实 MP2 样本时不能算验证完成
 
 **未验证：**
 
