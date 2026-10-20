@@ -3,9 +3,9 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.5.0**（`versionCode = 6`，`versionName = "1.5.0"`，tag `v1.5.0`）
+- 版本 **v1.6.0**（`versionCode = 7`，`versionName = "1.6.0"`，tag `v1.6.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 23 个 Kotlin 文件、约 5200 行
+- 23 个 Kotlin 文件、约 5400 行
 - release APK 约 **2.2 MB**
 
 ---
@@ -107,6 +107,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **音轨解不了时自动静音续播**：AVI 里封 MP2 音轨这类「画面正常、音频解不了」的文件，
   不再整片报错 —— 自动关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
   只对当前视频生效，切到别的视频会把音频轨重新打开
+- **全屏手势**：左半边上下滑调音量，右半边上下滑调亮度，屏幕中央浮出百分比，
+  停手 900ms 自动消失。亮度只改**当前窗口**（`Window.screenBrightness`），
+  不需要 `WRITE_SETTINGS`，离开播放页自动交还系统；音量走 `AudioManager` 的音乐流
 - **错误提示分类**：区分「音频解码失败 / 视频解码失败 / 容器不支持 / 文件读不到」，
   每种给出对应建议（转码 / 重新扫描 / 重启），原始错误码用小字放在下面，不占主视线
 
@@ -211,13 +214,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.5.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.5.0-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.6.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.6.0-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.5.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.6.0-release.apk
 ```
 
 ### 签名
@@ -238,14 +241,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.5.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.5.0  # 推上去即触发编译
+git tag v1.6.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.6.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.5.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.6.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -281,7 +284,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.5.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.6.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -424,6 +427,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   `CN=QingYing` / `3fa551ff…17ec`。降级判定依赖 media3 报错文本里的渲染器类名
   （`MediaCodecAudioRenderer`），属于实现细节耦合 —— 见下方「未验证」，
   没有真实 MP2 样本时不能算验证完成
+- **v1.6.0（全屏手势）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。手势的实际手感与冲突处理尚未真机复核
 
 **未验证：**
 
@@ -437,9 +442,13 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **音轨降级在真实文件上的表现**：本地没有 MP2/AC3 音轨的 AVI 样本，
   判定逻辑（渲染器类名匹配）与「降级后能否继续播」都还没在真机复核
 - 错误分类对 `ERROR_CODE_*` 的映射是否覆盖了实际遇到的所有失败
+- **全屏手势的手感**：左右半屏判定是否准确、与进度条/面板的触摸冲突、
+  亮度在开了「自适应亮度」的机型上是否会被系统拉回
 
 建议装机后重点确认这几处：
 
+- **全屏手势**：左半屏上下滑 → 音量变化并显示百分比；右半屏上下滑 → 亮度变化；
+  退出播放页后亮度应回到系统设置；拖动进度条时不应误触发音量/亮度
 - **音轨降级**：找一个音轨是 MP2 的 AVI → 应自动静音播放并提示一次，画面正常；
   切到下一集后声音应恢复（不能一直是静音）
 - **错误分类**：放一个 RMVB → 应提示「容器不支持」而不是笼统的「编码不支持」

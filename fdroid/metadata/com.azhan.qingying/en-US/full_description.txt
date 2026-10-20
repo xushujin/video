@@ -29,6 +29,8 @@ already on your phone. No account, no network, no ads, no runtime permissions.
 * Portrait and landscape layouts; landscape hides the system bars for a full
   screen picture
 * A manual landscape switch in the player controls, for when auto-rotate is off
+* Swipe gestures on the full-screen player: left half adjusts the volume, right
+  half adjusts the brightness, with a percentage indicator
 
 <b>Screen</b>
 * The screen stays on while the player screen is in the foreground, so a video

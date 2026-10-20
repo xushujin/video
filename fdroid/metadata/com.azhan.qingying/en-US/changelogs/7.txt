@@ -1,0 +1,9 @@
+Added full-screen swipe gestures.
+
+* Swipe up or down on the left half of the player to change the volume
+* Swipe up or down on the right half to change the screen brightness
+* A percentage indicator appears in the middle and fades out shortly after you
+  stop moving your finger
+* Brightness only affects the player window, so the system setting is left alone
+  and no permission is needed; it is handed back when you leave the player
+* Dragging the progress bar or the panels still takes priority over the gestures

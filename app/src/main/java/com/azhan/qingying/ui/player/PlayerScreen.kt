@@ -1,12 +1,17 @@
 package com.azhan.qingying.ui.player
 
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.media.AudioManager
+import android.os.SystemClock
+import android.provider.Settings
 import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Fullscreen
@@ -55,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -80,6 +88,7 @@ import com.azhan.qingying.util.formatCountdown
 import com.azhan.qingying.util.formatDuration
 import kotlinx.coroutines.delay
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * 播放页。
@@ -120,6 +129,19 @@ fun PlayerScreen(
     var showLoopPanel by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
+
+    // 手势 HUD（音量 / 亮度百分比）。停手 900ms 自动消失。
+    var gestureHud by remember { mutableStateOf<GestureHud?>(null) }
+    val audioManager = remember(context) {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
+    LaunchedEffect(gestureHud) {
+        if (gestureHud != null) {
+            delay(900)
+            gestureHud = null
+        }
+    }
 
     // 手动方向：0 = 交还系统，1 = 钉住横屏，2 = 钉住竖屏。
     // 用 rememberSaveable：Activity 万一被回收重建，用户刚点的横屏不该自己弹回去。
@@ -193,13 +215,19 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 离开播放页：同样是「只留音频」+ 不再拦熄屏
+    // 离开播放页：同样是「只留音频」+ 不再拦熄屏 + 亮度交还系统
     DisposableEffect(Unit) {
         setKeepScreenOn(context, true)
         onDispose {
             setKeepScreenOn(context, false)
             surfaceView?.let { player.detachSurface(it) }
             player.enableVideoTrack(false)
+            // 手势调的亮度只对播放页有效；不还原的话，整个 App 都会停在这个亮度
+            context.findActivity()?.window?.let { window ->
+                val attrs = window.attributes
+                attrs.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = attrs
+            }
         }
     }
 
@@ -224,13 +252,75 @@ fun PlayerScreen(
             .background(Color.Black),
     ) {
         // ---------------- 画面
+        // 点一下显隐控件；左半边上下滑调音量、右半边上下滑调亮度。
+        // 两个检测器放在不同的 pointerInput 里：拖动超过 touch slop 后由拖动检测器消费事件，
+        // 点击检测器自然取消，所以两者不打架；滑块等控件在上层，会先消费掉自己的拖动。
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { controlsVisible = !controlsVisible },
+                .pointerInput(Unit) {
+                    detectTapGestures { controlsVisible = !controlsVisible }
+                }
+                .pointerInput(showSleepPanel, showLoopPanel) {
+                    // 面板开着时不接管手势，否则在面板空白处拖动会误调音量/亮度
+                    if (showSleepPanel || showLoopPanel) return@pointerInput
+
+                    var totalDy = 0f
+                    var startVolume = 0f
+                    var startBrightness = 0f
+                    var kind: GestureKind? = null
+
+                    detectVerticalDragGestures(
+                        onDragStart = { offset ->
+                            totalDy = 0f
+                            val gestureKind = if (offset.x < size.width / 2f) {
+                                GestureKind.VOLUME
+                            } else {
+                                GestureKind.BRIGHTNESS
+                            }
+                            kind = gestureKind
+                            when (gestureKind) {
+                                GestureKind.VOLUME -> startVolume = audioManager
+                                    .getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
+
+                                GestureKind.BRIGHTNESS -> startBrightness = currentWindowBrightness(context)
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            totalDy += dragAmount
+                            val height = size.height.toFloat().coerceAtLeast(1f)
+                            when (kind) {
+                                GestureKind.VOLUME -> {
+                                    val max = audioManager
+                                        .getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                        .coerceAtLeast(1)
+                                    // 手指往上滑 dragAmount 为负，对应调大
+                                    val target = (startVolume - totalDy / height * max)
+                                        .roundToInt()
+                                        .coerceIn(0, max)
+                                    audioManager.setStreamVolume(
+                                        AudioManager.STREAM_MUSIC,
+                                        target,
+                                        0,
+                                    )
+                                    gestureHud = GestureHud(GestureKind.VOLUME, target.toFloat() / max)
+                                }
+
+                                GestureKind.BRIGHTNESS -> {
+                                    val target = (startBrightness - totalDy / height)
+                                        .coerceIn(MIN_BRIGHTNESS, 1f)
+                                    applyWindowBrightness(context, target)
+                                    gestureHud = GestureHud(GestureKind.BRIGHTNESS, target)
+                                }
+
+                                null -> Unit
+                            }
+                        },
+                        onDragEnd = { kind = null },
+                        onDragCancel = { kind = null },
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             val containerAspect = maxWidth / maxHeight
@@ -427,6 +517,9 @@ fun PlayerScreen(
                 }
             }
         }
+
+        // 手势 HUD 画在最上层：控件层带 34% 黑底，放在它下面会被压暗
+        gestureHud?.let { hud -> GestureHudOverlay(hud) }
     }
 }
 
@@ -437,6 +530,92 @@ private fun setKeepScreenOn(context: android.content.Context, on: Boolean) {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     } else {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+}
+
+/** 手势调节的对象：左半屏音量、右半屏亮度。 */
+private enum class GestureKind { VOLUME, BRIGHTNESS }
+
+/**
+ * 手势 HUD 的状态。
+ *
+ * [stamp] 每次变化都不同，用来让「停手后自动消失」的计时重新开始 ——
+ * 否则拖到上限、数值不再变化时，HUD 会在手指还按着的时候就消失。
+ */
+private data class GestureHud(
+    val kind: GestureKind,
+    val value: Float,
+    val stamp: Long = SystemClock.elapsedRealtime(),
+)
+
+/** 读当前窗口亮度；窗口没设过（< 0）时退回系统亮度。 */
+private fun currentWindowBrightness(context: Context): Float {
+    val activity = context.findActivity() ?: return 0.5f
+    val fromWindow = activity.window.attributes.screenBrightness
+    if (fromWindow >= 0f) return fromWindow
+    val system = runCatching {
+        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+    }.getOrDefault(128)
+    return (system / 255f).coerceIn(0f, 1f)
+}
+
+/**
+ * 只改当前窗口的亮度 —— 不需要 `WRITE_SETTINGS`，也不动系统设置，
+ * 所以这个手势仍然守得住「零运行时权限」。
+ */
+private fun applyWindowBrightness(context: Context, value: Float) {
+    val activity = context.findActivity() ?: return
+    val attrs = activity.window.attributes
+    attrs.screenBrightness = value.coerceIn(MIN_BRIGHTNESS, 1f)
+    activity.window.attributes = attrs
+}
+
+/** 亮度下限：0 会让屏幕全黑，用户会以为应用挂了。 */
+private const val MIN_BRIGHTNESS = 0.02f
+
+/** 音量 / 亮度手势的中央浮层。 */
+@Composable
+private fun GestureHudOverlay(hud: GestureHud) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 22.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = when {
+                    hud.kind == GestureKind.BRIGHTNESS -> Icons.Rounded.BrightnessHigh
+                    hud.value <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
+                    else -> Icons.AutoMirrored.Rounded.VolumeUp
+                },
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(hud.value.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(Color.White),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${(hud.value * 100).roundToInt()}%",
+                color = Color.White,
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 
