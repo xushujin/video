@@ -428,7 +428,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   （`MediaCodecAudioRenderer`），属于实现细节耦合 —— 见下方「未验证」，
   没有真实 MP2 样本时不能算验证完成
 - **v1.6.0（全屏手势）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。手势的实际手感与冲突处理尚未真机复核
+  Kotlin 编译零警告；CI Run 9 成功，Release 附件 `QingYing-v1.6.0.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。手势的实际手感与冲突处理尚未真机复核
 
 **未验证：**
 
