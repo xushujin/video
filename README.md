@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.3.0**（`versionCode = 4`，`versionName = "1.3.0"`，tag `v1.3.0`）
+- 版本 **v1.4.0**（`versionCode = 5`，`versionName = "1.4.0"`，tag `v1.4.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 23 个 Kotlin 文件、约 4900 行
 - release APK 约 **2.2 MB**
@@ -99,6 +99,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - 解不了的文件给出明确错误（含错误码名），不会静默黑屏
 - **横竖屏都支持**：竖屏竖排控件；横屏自动切**沉浸式**（隐藏状态栏/导航栏）+ 单行紧凑控件。
   横屏纵向只有 300–400dp，照竖屏堆四行控件会把画面挤掉一大半，所以横屏是独立布局
+- **手动横屏切换**：进度条右侧（横屏时在右下角）一个全屏键，直接给 Activity 设
+  `requestedOrientation` —— 系统「自动旋转」关着也能一键进/出横屏。
+  离开播放页会把方向交还系统，不会把列表页也锁在横屏
 
 ### 6. 防熄屏
 
@@ -200,13 +203,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.3.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.3.0-debug.apk` | 23 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.4.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.4.0-debug.apk` | 23 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.3.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.4.0-release.apk
 ```
 
 ### 签名
@@ -227,8 +230,8 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.3.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.3.0  # 推上去即触发编译
+git tag v1.4.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.4.0  # 推上去即触发编译
 ```
 
 产物有两个去处：

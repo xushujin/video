@@ -1,5 +1,6 @@
 package com.azhan.qingying.ui.player
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.view.SurfaceView
 import android.view.WindowManager
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -45,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,6 +119,34 @@ fun PlayerScreen(
     var showLoopPanel by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
+
+    // 手动方向：0 = 交还系统，1 = 钉住横屏，2 = 钉住竖屏。
+    // 用 rememberSaveable：Activity 万一被回收重建，用户刚点的横屏不该自己弹回去。
+    var orientationMode by rememberSaveable { mutableStateOf(ORIENTATION_SYSTEM) }
+
+    // manifest 里声明了 configChanges=orientation|screenSize，切方向不重建 Activity，
+    // 所以播放位置、面板开关、A/B 点都不会丢 —— 这里只负责把请求交给系统。
+    DisposableEffect(orientationMode) {
+        context.findActivity()?.requestedOrientation = when (orientationMode) {
+            ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        onDispose { }
+    }
+
+    // 离开播放页时把方向交还系统，否则回到列表页还卡在横屏里
+    DisposableEffect(Unit) {
+        onDispose {
+            context.findActivity()?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    val toggleOrientation: () -> Unit = {
+        // 当前是横屏就回竖屏，否则去横屏 —— 这样无论系统自动旋转开没开，
+        // 这个键都一定有效果，不会出现「点了没反应」。
+        orientationMode = if (isLandscape) ORIENTATION_PORTRAIT else ORIENTATION_LANDSCAPE
+    }
 
     // 控件自动隐藏：播放中 4 秒无操作就收起来；暂停时、拖进度条时、开着任一面板时不收
     LaunchedEffect(controlsVisible, player.isPlaying, showSleepPanel, showLoopPanel, dragging) {
@@ -293,6 +325,7 @@ fun PlayerScreen(
                                 player.seekTo(dragValue.toLong())
                                 dragging = false
                             },
+                            onToggleOrientation = toggleOrientation,
                         )
                     } else {
                         PortraitControls(
@@ -304,6 +337,7 @@ fun PlayerScreen(
                                 player.seekTo(dragValue.toLong())
                                 dragging = false
                             },
+                            onToggleOrientation = toggleOrientation,
                         )
                     }
                 }
@@ -461,6 +495,7 @@ private fun PortraitControls(
     dragValue: Float,
     onDrag: (Float) -> Unit,
     onDragFinished: () -> Unit,
+    onToggleOrientation: () -> Unit,
 ) {
     val palette = LocalNeuPalette.current
     val duration = player.durationMs.coerceAtLeast(0L)
@@ -504,6 +539,11 @@ private fun PortraitControls(
                 text = "${player.queueSize} 个视频",
                 color = palette.textSecondary,
                 fontSize = 11.sp,
+            )
+            Spacer(Modifier.width(8.dp))
+            RotateButton(
+                isLandscape = false,
+                onClick = onToggleOrientation,
             )
         }
 
@@ -691,6 +731,7 @@ private fun LandscapeControls(
     dragValue: Float,
     onDrag: (Float) -> Unit,
     onDragFinished: () -> Unit,
+    onToggleOrientation: () -> Unit,
 ) {
     val palette = LocalNeuPalette.current
     val duration = player.durationMs.coerceAtLeast(0L)
@@ -764,8 +805,49 @@ private fun LandscapeControls(
                 fontWeight = FontWeight.Medium,
             )
         }
+
+        Spacer(Modifier.width(6.dp))
+        RotateButton(
+            isLandscape = true,
+            onClick = onToggleOrientation,
+            size = 36.dp,
+        )
     }
 }
+
+/**
+ * 横屏切换键。
+ *
+ * 系统自动旋转关着的时候，光靠重力是转不过去的 —— 这个键直接给 Activity 设
+ * `requestedOrientation`，所以任何设备上都能一键进/出横屏。
+ */
+@Composable
+private fun RotateButton(
+    isLandscape: Boolean,
+    onClick: () -> Unit,
+    size: Dp = 34.dp,
+) {
+    val palette = LocalNeuPalette.current
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (isLandscape) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
+            contentDescription = if (isLandscape) "退出横屏" else "横屏播放",
+            tint = palette.textPrimary,
+            modifier = Modifier.size(size * 0.72f),
+        )
+    }
+}
+
+/** 手动方向的三种取值。0 交还系统，1 钉横屏，2 钉竖屏。 */
+private const val ORIENTATION_SYSTEM = 0
+private const val ORIENTATION_LANDSCAPE = 1
+private const val ORIENTATION_PORTRAIT = 2
 
 private fun speedLabel(step: Float): String =
     if (step == step.toInt().toFloat()) "${step.toInt()}x" else "${step}x"

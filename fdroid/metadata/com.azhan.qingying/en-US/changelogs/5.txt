@@ -1,0 +1,8 @@
+Added a manual landscape switch.
+
+* A fullscreen button in the player controls rotates the video to landscape and
+  back, even when the system auto-rotate setting is off
+* The player screen keeps the orientation you chose; leaving it hands the
+  orientation back to the system, so the library stays upright
+* Rotating does not interrupt playback - the position, the sleep timer, the
+  A-B points and the open panels all survive

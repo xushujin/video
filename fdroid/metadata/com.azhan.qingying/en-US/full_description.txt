@@ -28,6 +28,7 @@ already on your phone. No account, no network, no ads, no runtime permissions.
 * Per-video resume positions, plus a "Continue watching" row on the home screen
 * Portrait and landscape layouts; landscape hides the system bars for a full
   screen picture
+* A manual landscape switch in the player controls, for when auto-rotate is off
 
 <b>Screen</b>
 * The screen stays on while the player screen is in the foreground, so a video
