@@ -436,7 +436,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   Kotlin 编译零警告；CI Run 9 成功，Release 附件 `QingYing-v1.6.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。手势的实际手感与冲突处理尚未真机复核
 - **v1.7.0（左右滑快进快退）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。轴向分流的手感尚未真机复核
+  Kotlin 编译零警告；CI Run 10 成功，Release 附件 `QingYing-v1.7.0.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。轴向分流的手感尚未真机复核
 
 **未验证：**
 
