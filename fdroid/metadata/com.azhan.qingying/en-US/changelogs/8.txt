@@ -1,0 +1,10 @@
+Added horizontal swipes to seek.
+
+* Drag left or right on the video to jump backwards or forwards; a full screen
+  width covers two minutes, or the whole video if it is shorter
+* The indicator in the middle shows the offset (+0:15) and where you will land
+  (12:34 / 45:00)
+* The jump happens when you lift your finger - seeking on every move makes the
+  decoder rebuild and stutters
+* Horizontal and vertical swipes are told apart by direction, so volume and
+  brightness swipes still work as before

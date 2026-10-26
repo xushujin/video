@@ -10,6 +10,7 @@ import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -265,6 +266,46 @@ fun PlayerScreen(
                     // 面板开着时不接管手势，否则在面板空白处拖动会误调音量/亮度
                     if (showSleepPanel || showLoopPanel) return@pointerInput
 
+                    var totalDx = 0f
+                    var startPosition = 0L
+                    var pendingSeek: Long? = null
+
+                    // 左右滑：快进 / 快退。
+                    // 与上下滑并存靠「轴向 slop 谁先越过」自然分流：
+                    // 横向检测器在竖向移动超过 slop 时自行取消，反之亦然。
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            totalDx = 0f
+                            pendingSeek = null
+                            startPosition = player.positionMs
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            totalDx += dragAmount
+                            val width = size.width.toFloat().coerceAtLeast(1f)
+                            val duration = player.durationMs.coerceAtLeast(1L)
+                            // 整屏宽度对应 2 分钟；短片按片长收缩，免得一划就滑到底
+                            val span = minOf(SEEK_SPAN_MS, duration)
+                            val delta = (totalDx / width * span).toLong()
+                            val target = (startPosition + delta).coerceIn(0L, duration)
+                            pendingSeek = target
+                            gestureHud = GestureHud(
+                                kind = GestureKind.SEEK,
+                                value = target.toFloat() / duration,
+                                seekDeltaMs = target - startPosition,
+                                seekTargetMs = target,
+                            )
+                        },
+                        onDragEnd = {
+                            // 抬手才真正 seek：拖动过程中连续 seek 会让解码器反复重建，反而卡
+                            pendingSeek?.let { player.seekTo(it) }
+                            pendingSeek = null
+                        },
+                        onDragCancel = { pendingSeek = null },
+                    )
+                }
+                .pointerInput(showSleepPanel, showLoopPanel) {
+
                     var totalDy = 0f
                     var startVolume = 0f
                     var startBrightness = 0f
@@ -284,6 +325,9 @@ fun PlayerScreen(
                                     .getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
 
                                 GestureKind.BRIGHTNESS -> startBrightness = currentWindowBrightness(context)
+
+                                // 竖向手势只会是上面两种，SEEK 走横向检测器
+                                GestureKind.SEEK -> Unit
                             }
                         },
                         onVerticalDrag = { change, dragAmount ->
@@ -314,7 +358,7 @@ fun PlayerScreen(
                                     gestureHud = GestureHud(GestureKind.BRIGHTNESS, target)
                                 }
 
-                                null -> Unit
+                                GestureKind.SEEK, null -> Unit
                             }
                         },
                         onDragEnd = { kind = null },
@@ -519,7 +563,7 @@ fun PlayerScreen(
         }
 
         // 手势 HUD 画在最上层：控件层带 34% 黑底，放在它下面会被压暗
-        gestureHud?.let { hud -> GestureHudOverlay(hud) }
+        gestureHud?.let { hud -> GestureHudOverlay(hud, player.durationMs) }
     }
 }
 
@@ -533,8 +577,8 @@ private fun setKeepScreenOn(context: android.content.Context, on: Boolean) {
     }
 }
 
-/** 手势调节的对象：左半屏音量、右半屏亮度。 */
-private enum class GestureKind { VOLUME, BRIGHTNESS }
+/** 手势调节的对象：左半屏音量、右半屏亮度、横向拖动进度。 */
+private enum class GestureKind { VOLUME, BRIGHTNESS, SEEK }
 
 /**
  * 手势 HUD 的状态。
@@ -544,9 +588,17 @@ private enum class GestureKind { VOLUME, BRIGHTNESS }
  */
 private data class GestureHud(
     val kind: GestureKind,
+    /** 音量 / 亮度是 0..1；进度是目标位置占全片的比例。 */
     val value: Float,
+    /** 仅 SEEK 用：相对拖动起点的偏移，正数快进。 */
+    val seekDeltaMs: Long = 0L,
+    /** 仅 SEEK 用：拖动结束时会跳到这个位置。 */
+    val seekTargetMs: Long = 0L,
     val stamp: Long = SystemClock.elapsedRealtime(),
 )
+
+/** 左右滑一整屏对应的时长。短片会按片长收缩。 */
+private const val SEEK_SPAN_MS = 120_000L
 
 /** 读当前窗口亮度；窗口没设过（< 0）时退回系统亮度。 */
 private fun currentWindowBrightness(context: Context): Float {
@@ -573,9 +625,9 @@ private fun applyWindowBrightness(context: Context, value: Float) {
 /** 亮度下限：0 会让屏幕全黑，用户会以为应用挂了。 */
 private const val MIN_BRIGHTNESS = 0.02f
 
-/** 音量 / 亮度手势的中央浮层。 */
+/** 音量 / 亮度 / 进度手势的中央浮层。 */
 @Composable
-private fun GestureHudOverlay(hud: GestureHud) {
+private fun GestureHudOverlay(hud: GestureHud, durationMs: Long) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
@@ -584,38 +636,74 @@ private fun GestureHudOverlay(hud: GestureHud) {
                 .padding(horizontal = 22.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(
-                imageVector = when {
-                    hud.kind == GestureKind.BRIGHTNESS -> Icons.Rounded.BrightnessHigh
-                    hud.value <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
-                    else -> Icons.AutoMirrored.Rounded.VolumeUp
-                },
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.25f)),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(hud.value.coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .background(Color.White),
+            if (hud.kind == GestureKind.SEEK) {
+                Icon(
+                    imageVector = if (hud.seekDeltaMs >= 0L) {
+                        Icons.Rounded.FastForward
+                    } else {
+                        Icons.Rounded.FastRewind
+                    },
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = buildString {
+                        append(if (hud.seekDeltaMs >= 0L) "+" else "-")
+                        append(formatMark(abs(hud.seekDeltaMs)))
+                    },
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "${formatMark(hud.seekTargetMs)} / ${formatMark(durationMs)}",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                HudBar(hud.value)
+            } else {
+                Icon(
+                    imageVector = when {
+                        hud.kind == GestureKind.BRIGHTNESS -> Icons.Rounded.BrightnessHigh
+                        hud.value <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
+                        else -> Icons.AutoMirrored.Rounded.VolumeUp
+                    },
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                HudBar(hud.value)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "${(hud.value * 100).roundToInt()}%",
+                    color = Color.White,
+                    fontSize = 11.sp,
                 )
             }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "${(hud.value * 100).roundToInt()}%",
-                color = Color.White,
-                fontSize = 11.sp,
-            )
         }
+    }
+}
+
+@Composable
+private fun HudBar(fraction: Float) {
+    Box(
+        modifier = Modifier
+            .width(120.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(Color.White.copy(alpha = 0.25f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .background(Color.White),
+        )
     }
 }
 
