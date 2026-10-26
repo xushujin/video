@@ -441,7 +441,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   Kotlin 编译零警告；CI Run 10 成功，Release 附件 `QingYing-v1.7.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。轴向分流的手感尚未真机复核
 - **v1.7.1（实时预览 + 幅度可配）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。节流实时 seek 的流畅度尚未真机复核
+  Kotlin 编译零警告；CI Run 11 成功，Release 附件 `QingYing-v1.7.1.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。节流实时 seek 的流畅度尚未真机复核
 
 **未验证：**
 
