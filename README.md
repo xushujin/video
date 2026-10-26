@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.7.0**（`versionCode = 8`，`versionName = "1.7.0"`，tag `v1.7.0`）
+- 版本 **v1.7.1**（`versionCode = 9`，`versionName = "1.7.1"`，tag `v1.7.1`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 23 个 Kotlin 文件、约 5500 行
 - release APK 约 **2.2 MB**
@@ -110,9 +110,11 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **全屏手势**：左半边上下滑调音量，右半边上下滑调亮度，屏幕中央浮出百分比，
   停手 900ms 自动消失。亮度只改**当前窗口**（`Window.screenBrightness`），
   不需要 `WRITE_SETTINGS`，离开播放页自动交还系统；音量走 `AudioManager` 的音乐流
-- **左右滑快进快退**：在画面上横向拖动，整屏宽度对应 2 分钟（短片按片长收缩），
-  中央浮层显示 `+0:15` 和目标位置（`12:34 / 45:00`）。**抬手才真正跳转** ——
-  拖动中连续 seek 会让解码器反复重建，反而更卡
+- **左右滑快进快退**：在画面上横向拖动，**拖动过程中画面就跟着跳**（节流 180ms 一次），
+  抬手再补一次精确位置。中央浮层显示 `+0:15` 和目标位置（`12:34 / 45:00`）。
+  节流是必须的：每一帧都 seek 会让解码器反复 flush + 走 MediaSession 的 IPC，反而卡成幻灯片
+- **幅度可配**：设置 → 播放 → 滑动快进幅度，整屏对应 **30 秒 / 1 / 2 / 5 分钟**（默认 2 分钟）；
+  短片仍按片长收缩，不会一划就到底
 - 上下滑与左右滑按**轴向分流**：横向位移先超过 touch slop 就是调进度，
   纵向先超过就是调音量/亮度，互不干扰
 - **错误提示分类**：区分「音频解码失败 / 视频解码失败 / 容器不支持 / 文件读不到」，
@@ -219,13 +221,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.7.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.7.0-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.7.1-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.7.1-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.7.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.7.1-release.apk
 ```
 
 ### 签名
@@ -246,14 +248,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.7.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.7.0  # 推上去即触发编译
+git tag v1.7.1          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.7.1  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.7.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.7.1.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -289,7 +291,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.7.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.7.1-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -438,6 +440,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **v1.7.0（左右滑快进快退）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   Kotlin 编译零警告；CI Run 10 成功，Release 附件 `QingYing-v1.7.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。轴向分流的手感尚未真机复核
+- **v1.7.1（实时预览 + 幅度可配）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。节流实时 seek 的流畅度尚未真机复核
 
 **未验证：**
 
@@ -455,12 +459,14 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   亮度在开了「自适应亮度」的机型上是否会被系统拉回
 - **左右滑与上下滑的轴向分流**：斜向拖动时谁先越过 slop 决定走哪条路，
   真机上是否会出现「想调音量却跳了进度」
+- **节流实时 seek 的实际流畅度**：180ms 一次在低端机上是否仍会顿、拖动时音频是否断续
 
 建议装机后重点确认这几处：
 
 - **全屏手势**：左半屏上下滑 → 音量变化并显示百分比；右半屏上下滑 → 亮度变化；
   退出播放页后亮度应回到系统设置；拖动进度条时不应误触发音量/亮度
-- **左右滑**：横向拖动 → 中央显示 `+0:15` 与目标时间，抬手后跳到该位置；
+- **左右滑**：横向拖动 → 画面**跟着手指跳**、中央显示 `+0:15` 与目标时间，抬手后停在精确位置；
+  设置里把幅度改成 30 秒 / 5 分钟后，同样一段拖动应给出明显不同的跨度；
   竖着滑仍然是音量/亮度；拖动进度条时不应触发
 - **音轨降级**：找一个音轨是 MP2 的 AVI → 应自动静音播放并提示一次，画面正常；
   切到下一集后声音应恢复（不能一直是静音）

@@ -109,6 +109,8 @@ data class AppPrefs(
     val autoResume: Boolean = true,
     /** 默认倍速。 */
     val playbackSpeed: Float = 1.0f,
+    /** 横向滑动整屏对应的时长（毫秒）：决定快进/快退的幅度。 */
+    val seekSensitivityMs: Long = 120_000L,
     /** 倒计时结束后的默认动作。 */
     val sleepAction: SleepAction = SleepAction.EXIT,
 )

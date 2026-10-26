@@ -33,6 +33,13 @@ Repo: https://github.com/xushujin/video.git
 #   用 glob 是为了以后升版本号不用改配方。
 #   如果 F-Droid 的 CI 报「找不到 APK」，先看这一行。
 Builds:
+  - versionName: '1.7.1'
+    versionCode: 9
+    commit: v1.7.1
+    output: app/build/outputs/apk/release/QingYing-*-release.apk
+    gradle:
+      - yes
+
   - versionName: '1.7.0'
     versionCode: 8
     commit: v1.7.0
@@ -100,5 +107,5 @@ Builds:
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[\d.]+$
 UpdateCheckData: app/build.gradle.kts|versionCode\s*=\s*(\d+)|.|versionName\s*=\s*"(.*)"
-CurrentVersion: '1.7.0'
-CurrentVersionCode: 8
+CurrentVersion: '1.7.1'
+CurrentVersionCode: 9

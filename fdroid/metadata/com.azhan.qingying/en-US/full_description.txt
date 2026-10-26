@@ -31,8 +31,9 @@ already on your phone. No account, no network, no ads, no runtime permissions.
 * A manual landscape switch in the player controls, for when auto-rotate is off
 * Swipe gestures on the full-screen player: left half adjusts the volume, right
   half adjusts the brightness, with a percentage indicator
-* Swipe left or right to seek; the offset and the target time are shown while you
-  drag, and the jump is applied when you lift your finger
+* Swipe left or right to seek; the picture follows your finger and the offset and
+  target time are shown while you drag. How far a full swipe goes (30 seconds to
+  5 minutes) is configurable in the settings
 
 <b>Screen</b>
 * The screen stays on while the player screen is in the foreground, so a video

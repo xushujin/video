@@ -46,6 +46,9 @@ import com.azhan.qingying.ui.neu.NeuSwitch
 import com.azhan.qingying.ui.theme.LocalNeuPalette
 import kotlinx.coroutines.launch
 
+/** 横向滑动幅度的可选值：整屏对应的毫秒数。 */
+private val SEEK_SPAN_OPTIONS = listOf(30_000L, 60_000L, 120_000L, 300_000L)
+
 @Composable
 fun SettingsScreen(
     container: AppContainer,
@@ -139,6 +142,34 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(Modifier.height(14.dp))
+
+            Text("滑动快进幅度", color = palette.textSecondary, fontSize = 12.sp)
+            Text(
+                text = "横向滑满一屏对应的时长，短了更精细、长了更省事",
+                color = palette.textSecondary,
+                fontSize = 11.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            NeuSegmented(
+                options = SEEK_SPAN_OPTIONS,
+                selected = prefs.seekSensitivityMs,
+                onSelect = { span ->
+                    scope.launch {
+                        container.library.updatePrefs { it.copy(seekSensitivityMs = span) }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { span ->
+                    when (span) {
+                        30_000L -> "30 秒"
+                        60_000L -> "1 分钟"
+                        300_000L -> "5 分钟"
+                        else -> "2 分钟"
+                    }
+                },
+            )
         }
 
         SettingCard(title = "倒计时退出", subtitle = "倒计时到点后的默认动作，播放页里可临时改") {

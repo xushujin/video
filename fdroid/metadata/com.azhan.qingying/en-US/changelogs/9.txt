@@ -1,0 +1,9 @@
+Seeking by swiping now follows your finger, and its speed is configurable.
+
+* The picture jumps while you drag (throttled to about five seeks per second), and
+  the exact position is applied when you lift your finger
+* New setting: Settings - Playback - Swipe seek distance, choosing how much a full
+  screen swipe covers: 30 seconds, 1, 2 or 5 minutes (2 minutes by default)
+* Short videos still shrink the range so a single swipe cannot jump to the end
+* Throttling matters: seeking on every frame makes the decoder rebuild constantly
+  and the video stutters instead

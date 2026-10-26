@@ -117,6 +117,9 @@ fun PlayerScreen(
         LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val folders by container.library.folders.collectAsState()
+    val prefs by container.library.prefs.collectAsState()
+    // 横向滑动的幅度：设置里可选，这里再夹一次，避免存档里的脏值把整片都跳过去
+    val seekSpanMs = prefs.seekSensitivityMs.coerceIn(10_000L, 600_000L)
     val currentVideoId = player.currentVideoId
     val currentVideo = remember(folders, currentVideoId) {
         folders.asSequence()
@@ -262,13 +265,14 @@ fun PlayerScreen(
                 .pointerInput(Unit) {
                     detectTapGestures { controlsVisible = !controlsVisible }
                 }
-                .pointerInput(showSleepPanel, showLoopPanel) {
+                .pointerInput(showSleepPanel, showLoopPanel, seekSpanMs) {
                     // 面板开着时不接管手势，否则在面板空白处拖动会误调音量/亮度
                     if (showSleepPanel || showLoopPanel) return@pointerInput
 
                     var totalDx = 0f
                     var startPosition = 0L
                     var pendingSeek: Long? = null
+                    var lastLiveSeekAt = 0L
 
                     // 左右滑：快进 / 快退。
                     // 与上下滑并存靠「轴向 slop 谁先越过」自然分流：
@@ -277,6 +281,7 @@ fun PlayerScreen(
                         onDragStart = {
                             totalDx = 0f
                             pendingSeek = null
+                            lastLiveSeekAt = 0L
                             startPosition = player.positionMs
                         },
                         onHorizontalDrag = { change, dragAmount ->
@@ -284,8 +289,8 @@ fun PlayerScreen(
                             totalDx += dragAmount
                             val width = size.width.toFloat().coerceAtLeast(1f)
                             val duration = player.durationMs.coerceAtLeast(1L)
-                            // 整屏宽度对应 2 分钟；短片按片长收缩，免得一划就滑到底
-                            val span = minOf(SEEK_SPAN_MS, duration)
+                            // 整屏对应的时长由设置决定；短片按片长收缩，免得一划就到底
+                            val span = minOf(seekSpanMs, duration)
                             val delta = (totalDx / width * span).toLong()
                             val target = (startPosition + delta).coerceIn(0L, duration)
                             pendingSeek = target
@@ -295,9 +300,16 @@ fun PlayerScreen(
                                 seekDeltaMs = target - startPosition,
                                 seekTargetMs = target,
                             )
+                            // 实时跳，但节流：每一帧都 seek 会把解码器打爆（每次都要 flush + 走 IPC）。
+                            // 180ms 一次，画面能跟着走，又不会卡成幻灯片。
+                            val now = SystemClock.elapsedRealtime()
+                            if (now - lastLiveSeekAt >= LIVE_SEEK_INTERVAL_MS) {
+                                lastLiveSeekAt = now
+                                player.seekTo(target)
+                            }
                         },
                         onDragEnd = {
-                            // 抬手才真正 seek：拖动过程中连续 seek 会让解码器反复重建，反而卡
+                            // 抬手补最后一次精确位置 —— 节流窗口里的最后一段位移不能丢
                             pendingSeek?.let { player.seekTo(it) }
                             pendingSeek = null
                         },
@@ -597,8 +609,8 @@ private data class GestureHud(
     val stamp: Long = SystemClock.elapsedRealtime(),
 )
 
-/** 左右滑一整屏对应的时长。短片会按片长收缩。 */
-private const val SEEK_SPAN_MS = 120_000L
+/** 实时 seek 的节流间隔：太密会把解码器打爆，太疏画面跟不上手指。 */
+private const val LIVE_SEEK_INTERVAL_MS = 180L
 
 /** 读当前窗口亮度；窗口没设过（< 0）时退回系统亮度。 */
 private fun currentWindowBrightness(context: Context): Float {
