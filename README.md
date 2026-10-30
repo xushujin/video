@@ -487,7 +487,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   验签 `CN=QingYing` / `3fa551ff…17ec`。修复点是「检查成功进入 UpToDate 后没有出口」，
   已按状态逐个补齐
 - **v1.8.3（下载进度条）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。进度依赖 `DownloadManager` 的字节数，尚未在真机观察过跳变
+  Kotlin 编译零警告；CI Run 15 成功，Release 附件 `QingYing-v1.8.3.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。进度依赖 `DownloadManager` 的字节数，
+  尚未在真机观察过跳变
 
 **未验证：**
 
