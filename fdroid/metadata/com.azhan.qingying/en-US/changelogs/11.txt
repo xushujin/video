@@ -1,0 +1,9 @@
+Audio decoding now falls back to a software decoder before giving up.
+
+* When the audio track fails to decode, the player retries once with the system's
+  software decoder instead of muting the video straight away
+* Only if that also fails is the audio track disabled and the picture continues
+* The decoder name is now included in the error details, so a broken device codec
+  is easy to identify
+* Software decoding is limited to audio; video stays on hardware, since software
+  4K decoding would drop frames

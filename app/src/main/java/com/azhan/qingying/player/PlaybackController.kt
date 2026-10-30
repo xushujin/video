@@ -16,6 +16,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.azhan.qingying.data.VideoItem
@@ -103,6 +104,14 @@ class PlaybackController(private val context: Context) {
      */
     private var audioDisabledVideoId: String? = null
 
+    /**
+     * 已经为哪个视频切过「音频软解」。
+     *
+     * 记下来是为了分级降级：第一次音频解码失败先切软解重试，软解也失败才静音。
+     * 切到别的视频时清空，让正常文件继续走硬解（省电）。
+     */
+    private var softwareDecodingVideoId: String? = null
+
     // ------------------------------------------------------------ 片段循环
     //
     // A 点 / B 点都是「当前视频内」的毫秒位置，[NO_LOOP] 表示没设。
@@ -157,6 +166,11 @@ class PlaybackController(private val context: Context) {
             if (audioDisabledVideoId != null && audioDisabledVideoId != mediaItem?.mediaId) {
                 audioDisabledVideoId = null
                 setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            }
+            // 同理，软解只是为某一个文件临时开的，换片子就交还给硬解
+            if (softwareDecodingVideoId != null && softwareDecodingVideoId != mediaItem?.mediaId) {
+                softwareDecodingVideoId = null
+                DecoderPreference.preferSoftwareAudio = false
             }
             currentVideoId = mediaItem?.mediaId
             positionMs = 0L
@@ -390,6 +404,8 @@ class PlaybackController(private val context: Context) {
         clearLoop()
         // 队列清空了，之前因为音轨坏掉而关掉的音频要恢复，否则下一条也没声音
         audioDisabledVideoId = null
+        softwareDecodingVideoId = null
+        DecoderPreference.preferSoftwareAudio = false
         setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
         stopTicker()
     }
@@ -448,7 +464,10 @@ class PlaybackController(private val context: Context) {
     }
 
     /**
-     * 音频轨解不了时的降级：关掉音频轨、回到原位置继续播。
+     * 音频轨解不了时的分级降级。
+     *
+     * 1. 先切「音频软解」重试一次 —— 很多失败是厂商硬解实现的问题，系统 C2 软解能解；
+     * 2. 软解也失败，才关掉音频轨、回到原位置继续放画面。
      *
      * 要同时满足「解码类错误」+「来自音频渲染器」+「这个视频还没降级过」才接管，
      * 返回 true 表示这次错误已经处理掉，调用方不用再弹错误卡片。
@@ -461,32 +480,61 @@ class PlaybackController(private val context: Context) {
         if (audioDisabledVideoId == videoId) return false
         if (!isAudioTrackFailure(error)) return false
 
+        // 第一级：先切「音频软解」重试。
+        // 很多「解不了」不是设备没有解码器，而是厂商的硬解实现有问题 ——
+        // 系统自带的 C2 软解（c2.android.*）往往能解，不该一上来就静音。
+        if (softwareDecodingVideoId != videoId) {
+            softwareDecodingVideoId = videoId
+            DecoderPreference.preferSoftwareAudio = true
+            playbackError = null
+            retryPlayback(disableAudio = false)
+            return true
+        }
+
+        // 第二级：软解也失败 → 关掉音频轨，继续放画面
         audioDisabledVideoId = videoId
         playbackError = null
         noticeMessage = "音频编码设备解不了，已静音播放（画面正常）"
+        retryPlayback(disableAudio = true)
+        return true
+    }
 
+    /** 从当前位置重新 prepare 并继续播；[disableAudio] 为 true 时先把音频轨关掉。 */
+    private fun retryPlayback(disableAudio: Boolean) {
         val resumeAt = (controller?.currentPosition ?: positionMs).coerceAtLeast(0L)
         scope.launch {
             // 等播放器把错误状态收干净再 prepare：立刻重试大概率又拿到同一个错误
             delay(120)
             val mediaController = controller ?: return@launch
             runCatching {
-                mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-                    .build()
+                if (disableAudio) {
+                    mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                        .build()
+                }
                 mediaController.prepare()
                 mediaController.seekTo(resumeAt)
                 mediaController.play()
             }.onFailure { t ->
                 playbackError = PlaybackErrorInfo(
                     title = "这个文件播不了",
-                    detail = t.message ?: "关掉音频轨后仍然失败",
+                    detail = t.message ?: "重试仍然失败",
                     hint = "音频轨之外的部分也解不了，这个文件需要先转码。",
                 )
             }
         }
-        return true
+    }
+
+    /** 从异常链里捞出解码器名；拿不到就返回 null。 */
+    @SuppressLint("UnsafeOptInUsageError")
+    private fun codecNameOf(error: PlaybackException): String? {
+        var cause: Throwable? = error.cause
+        while (cause != null) {
+            if (cause is MediaCodecDecoderException) return cause.codecInfo?.name
+            cause = cause.cause
+        }
+        return null
     }
 
     /**
@@ -528,6 +576,8 @@ class PlaybackController(private val context: Context) {
         val detail = buildString {
             append(error.errorCodeName)
             error.message?.let { append("：").append(it) }
+            // 带上真正用到的解码器名：下次再遇到「解不了」，一眼能看出是硬解还是软解挂了
+            codecNameOf(error)?.let { append("（解码器：").append(it).append("）") }
         }
 
         if (isAudioTrackFailure(error)) {

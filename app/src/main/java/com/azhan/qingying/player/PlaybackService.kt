@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -30,7 +31,14 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
+        // 首选解码器失败时自动换下一个候选（enableDecoderFallback 默认是关的）。
+        // 配合 SwitchableCodecSelector，还能在运行时整体切成「音频软解优先」。
+        val renderersFactory = DefaultRenderersFactory(this)
+            .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(SwitchableCodecSelector())
+
         val player = ExoPlayer.Builder(this)
+            .setRenderersFactory(renderersFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)

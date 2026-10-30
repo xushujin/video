@@ -3,9 +3,9 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.8.0**（`versionCode = 10`，`versionName = "1.8.0"`，tag `v1.8.0`）
+- 版本 **v1.8.1**（`versionCode = 11`，`versionName = "1.8.1"`，tag `v1.8.1`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 24 个 Kotlin 文件、约 5900 行
+- 25 个 Kotlin 文件、约 6000 行
 - release APK 约 **2.2 MB**
 
 ---
@@ -104,9 +104,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **手动横屏切换**：进度条右侧（横屏时在右下角）一个全屏键，直接给 Activity 设
   `requestedOrientation` —— 系统「自动旋转」关着也能一键进/出横屏。
   离开播放页会把方向交还系统，不会把列表页也锁在横屏
-- **音轨解不了时自动静音续播**：AVI 里封 MP2 音轨这类「画面正常、音频解不了」的文件，
-  不再整片报错 —— 自动关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
-  只对当前视频生效，切到别的视频会把音频轨重新打开
+- **音轨解不了时分级降级**：先切**音频软解**重试一次（厂商硬解实现有问题时，系统自带的
+  C2 软解往往能解），软解也失败才关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
+  只对当前视频生效，切到别的视频会交还硬解、并重新打开音频轨
 - **全屏手势**：左半边上下滑调音量，右半边上下滑调亮度，屏幕中央浮出百分比，
   停手 900ms 自动消失。亮度只改**当前窗口**（`Window.screenBrightness`），
   不需要 `WRITE_SETTINGS`，离开播放页自动交还系统；音量走 `AudioManager` 的音乐流
@@ -182,6 +182,7 @@ video/
         ├── player/
         │   ├── PlaybackService.kt      # MediaSessionService（后台播放的载体）
         │   ├── PlaybackController.kt   # MediaController 封装 → Compose state
+        │   ├── DecoderSelector.kt      # 可切换的解码器选择器（音频软解回退）
         │   └── SleepTimer.kt           # 倒计时退出
         ├── ui/
         │   ├── AppRoot.kt              # 导航（3 个页面）+ 按页换主题
@@ -233,13 +234,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.0-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.1-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.1-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.8.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.8.1-release.apk
 ```
 
 ### 签名
@@ -260,14 +261,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.8.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.8.0  # 推上去即触发编译
+git tag v1.8.1          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.8.1  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.8.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.8.1.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -303,7 +304,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.1-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -386,6 +387,18 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - 硬件加速下 `setShadowLayer` 对非文本绘制从 **API 28** 起才生效，
   更低版本会退化成扁平卡片（功能不受影响）
 
+### 8. 音频解不了时为什么先换解码器，而不是直接软解
+
+`DefaultRenderersFactory.setEnableDecoderFallback(true)` 让首选解码器失败后自动试下一个候选；
+再叠一个可切换的 `MediaCodecSelector`：第一次音频解码失败时把**音频轨**切成软解优先重试，
+仍失败才关音轨静音。
+
+只切音频不切视频：软解 4K 视频会明显掉帧，而这类失败几乎都出在音频上。
+
+换解码器**不需要 FFmpeg 扩展** —— 系统自带的 C2 软解（`c2.android.*`）已经覆盖
+mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类「系统里压根没有
+解码器」的，才需要真正的软解库。
+
 ---
 
 ## 五、已知限制
@@ -404,7 +417,7 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
   播不了会给分类后的错误提示，不是静默黑屏。
   - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2），MIME 同样是 `audio/mpeg`，
     系统能力检查报「支持」但真解码时失败（`ERROR_CODE_DECODING_FAILED`）。
-    v1.5.0 起这种情况自动降级为静音播放，画面照常
+    v1.5.0 起会自动降级为静音播放；v1.8.1 起先尝试切系统软解，仍失败才静音
   - **RMVB 是真的不支持**：ExoPlayer 没有 RealMedia 提取器，手机也基本没有 RealVideo 解码器，
     静音降级也救不回来，只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
 - **时长 / 分辨率探测是逐个文件做的**，超大目录首次展开会看到「正在读取时长…」停留一会儿。
@@ -462,6 +475,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **v1.8.0（应用内更新）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   Kotlin 编译零警告；CI Run 12 成功，Release 附件 `QingYing-v1.8.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。检查 / 下载 / 安装整条链路尚未在真机跑通
+- **v1.8.1（音频软解回退）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。软解回退与静音降级都还没在真机样本上验证
 
 **未验证：**
 
@@ -482,6 +497,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **节流实时 seek 的实际流畅度**：180ms 一次在低端机上是否仍会顿、拖动时音频是否断续
 - **应用内更新的完整链路**：GitHub API 解析、`DownloadManager` 下载、`FileProvider`
   调起安装器、「安装未知应用」授权回来后的重试，全都还没在真机跑过
+- **音频软解回退是否真的生效**：需要一条「硬解失败、系统软解能解」的样本；
+  另外 `MediaCodecSelector` 只在 prepare 时重新查询，重试链路是否真换掉解码器要真机确认
 
 建议装机后重点确认这几处：
 
@@ -495,8 +512,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **左右滑**：横向拖动 → 画面**跟着手指跳**、中央显示 `+0:15` 与目标时间，抬手后停在精确位置；
   设置里把幅度改成 30 秒 / 5 分钟后，同样一段拖动应给出明显不同的跨度；
   竖着滑仍然是音量/亮度；拖动进度条时不应触发
-- **音轨降级**：找一个音轨是 MP2 的 AVI → 应自动静音播放并提示一次，画面正常；
-  切到下一集后声音应恢复（不能一直是静音）
+- **音轨降级**：找一个音轨是 MP2 的 AVI → 应先切软解重试；软解也不行才提示「已静音播放」，
+  画面正常；切到下一集后声音应恢复。错误卡片里的「解码器：xxx」要能看出是哪条解码器挂的
 - **错误分类**：放一个 RMVB → 应提示「容器不支持」而不是笼统的「编码不支持」
 - **手动横屏**：竖屏点全屏键 → 应立刻转横屏、播放位置不断；横屏点退出 → 回竖屏；
   返回列表页不应还卡在横屏
