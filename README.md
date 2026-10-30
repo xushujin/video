@@ -481,7 +481,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 13 成功，Release 附件 `QingYing-v1.8.1.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。软解回退与静音降级都还没在真机样本上验证
 - **v1.8.2（更新按钮卡死修复）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。修复点是「检查成功进入 UpToDate 后没有出口」，已按状态逐个补齐
+  Kotlin 编译零警告；CI Run 14 成功，Release 附件 `QingYing-v1.8.2.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。修复点是「检查成功进入 UpToDate 后没有出口」，
+  已按状态逐个补齐
 
 **未验证：**
 
