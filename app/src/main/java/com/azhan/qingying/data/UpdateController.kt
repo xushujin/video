@@ -38,7 +38,8 @@ sealed interface UpdateState {
     data object Downloading : UpdateState
     data object Installing : UpdateState
     data class Failed(val message: String) : UpdateState
-    data class Blocked(val message: String) : UpdateState
+    /** [pending] 非空表示「有包要装，但被系统拦住了」，用户可以点继续安装。 */
+    data class Blocked(val message: String, val pending: UpdateInfo? = null) : UpdateState
 }
 
 /**
@@ -84,7 +85,10 @@ class UpdateController(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
-            state = UpdateState.Blocked("需要先允许「安装未知应用」，已为你打开设置，回来再点一次")
+            state = UpdateState.Blocked(
+                "需要先允许「安装未知应用」，已为你打开设置，回来点「继续安装」",
+                pending = info,
+            )
             openUnknownSourcesSettings()
             return
         }

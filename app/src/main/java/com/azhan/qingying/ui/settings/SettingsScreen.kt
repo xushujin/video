@@ -229,27 +229,51 @@ fun SettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             when (val update = container.updater.state) {
-                is UpdateState.Idle -> NeuButton(
-                    onClick = { container.updater.check(BuildConfig.VERSION_NAME) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("检查更新", color = palette.textPrimary, fontSize = 13.sp)
+                is UpdateState.Idle -> CheckUpdateButton("检查更新") {
+                    container.updater.check(BuildConfig.VERSION_NAME)
                 }
 
                 is UpdateState.Checking -> UpdateHint("正在检查…")
-                is UpdateState.UpToDate -> UpdateHint("已是最新版本")
+
+                // 每个「结束态」都要留一条回到检查的出口，否则点过一次就卡死在这里
+                is UpdateState.UpToDate -> {
+                    UpdateHint("已是最新版本")
+                    Spacer(Modifier.height(6.dp))
+                    CheckUpdateButton("再次检查") {
+                        container.updater.check(BuildConfig.VERSION_NAME)
+                    }
+                }
+
                 is UpdateState.Downloading -> UpdateHint("正在下载，完成后会自动打开安装器…")
-                is UpdateState.Installing -> UpdateHint("已打开安装器，按系统提示完成安装")
-                is UpdateState.Blocked -> UpdateHint(update.message)
+
+                is UpdateState.Installing -> {
+                    UpdateHint("已打开安装器，按系统提示完成安装；没弹出来就再点一次")
+                    Spacer(Modifier.height(6.dp))
+                    CheckUpdateButton("重新检查") {
+                        container.updater.check(BuildConfig.VERSION_NAME)
+                    }
+                }
+
+                is UpdateState.Blocked -> {
+                    UpdateHint(update.message)
+                    Spacer(Modifier.height(6.dp))
+                    val pending = update.pending
+                    if (pending != null) {
+                        CheckUpdateButton("继续安装") {
+                            container.updater.downloadAndInstall(pending)
+                        }
+                    } else {
+                        CheckUpdateButton("重新检查") {
+                            container.updater.check(BuildConfig.VERSION_NAME)
+                        }
+                    }
+                }
 
                 is UpdateState.Failed -> {
                     UpdateHint("检查失败：${update.message}")
                     Spacer(Modifier.height(6.dp))
-                    NeuButton(
-                        onClick = { container.updater.check(BuildConfig.VERSION_NAME) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("重试", color = palette.textPrimary, fontSize = 13.sp)
+                    CheckUpdateButton("重试") {
+                        container.updater.check(BuildConfig.VERSION_NAME)
                     }
                 }
 
@@ -340,6 +364,14 @@ private fun SettingCard(
 private fun UpdateHint(text: String) {
     val palette = LocalNeuPalette.current
     Text(text, color = palette.textSecondary, fontSize = 11.sp)
+}
+
+@Composable
+private fun CheckUpdateButton(label: String, onClick: () -> Unit) {
+    val palette = LocalNeuPalette.current
+    NeuButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(label, color = palette.textPrimary, fontSize = 13.sp)
+    }
 }
 
 @Composable

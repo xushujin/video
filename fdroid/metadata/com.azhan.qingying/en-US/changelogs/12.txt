@@ -1,0 +1,8 @@
+Fixed the update check getting stuck after the first attempt.
+
+* After a check finished the button disappeared, and only restarting the app
+  brought it back
+* Every end state now offers a way to check again: up to date, failed, or blocked
+  by the system
+* When installation is blocked by the "install unknown apps" setting, a Continue
+  button retries the install instead of fetching the release again
