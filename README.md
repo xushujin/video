@@ -476,7 +476,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 12 成功，Release 附件 `QingYing-v1.8.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。检查 / 下载 / 安装整条链路尚未在真机跑通
 - **v1.8.1（音频软解回退）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。软解回退与静音降级都还没在真机样本上验证
+  Kotlin 编译零警告；CI Run 13 成功，Release 附件 `QingYing-v1.8.1.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。软解回退与静音降级都还没在真机样本上验证
 
 **未验证：**
 
