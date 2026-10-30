@@ -19,6 +19,16 @@
     -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      应用内更新需要的两条：
+      - INTERNET：只用于「检查更新」拉 GitHub Releases 和下载 APK，没有在线播放。
+      - REQUEST_INSTALL_PACKAGES：Android 8+ 调起安装器需要；用户还要在系统设置里
+        为「轻影」打开「安装未知应用」，否则安装会被系统拦下。
+      两者都是安装期权限，不弹运行时权限框。
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".QingYingApp"
         android:allowBackup="true"
@@ -49,6 +59,17 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- 把下载好的 APK 以 content:// 交给系统安装器，避免暴露 file:// -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

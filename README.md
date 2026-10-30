@@ -3,9 +3,9 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.7.1**（`versionCode = 9`，`versionName = "1.7.1"`，tag `v1.7.1`）
+- 版本 **v1.8.0**（`versionCode = 10`，`versionName = "1.8.0"`，tag `v1.8.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 23 个 Kotlin 文件、约 5500 行
+- 24 个 Kotlin 文件、约 5900 行
 - release APK 约 **2.2 MB**
 
 ---
@@ -144,6 +144,17 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - 启动窗口背景跟随浅色外壳（`windowBackground = #EDEFF3`），避免启动瞬间闪一下深色
 - 自适应图标同样按浅色配色重绘（圆盘 `#EDEFF3` / 月牙 `#B9C0CE` / 三角 `#4E62E0`）
 
+### 8. 在线更新
+
+- 设置 → 关于 → 「检查更新」：读 GitHub Releases 的最新 tag，与 `versionName` 比，
+  有新版就列出更新说明和「下载并安装」
+- 下载交给系统 `DownloadManager`（通知栏有进度），完成后用 `FileProvider` 交给系统安装器
+- 第一次安装需要允许「安装未知应用」，应用会把你引导到对应的系统设置页
+- **只在点按钮时联网**：启动不检查、后台不轮询。也没有引 OkHttp / Retrofit ——
+  一个 `HttpURLConnection` + `org.json` 就够了
+- 安装来源是 F-Droid 时按钮会拦住并提示改用 F-Droid 更新：两边签名不同，
+  直接装必然 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+
 ---
 
 ## 二、工程结构
@@ -166,7 +177,8 @@ video/
         │   ├── VideoStore.kt           # DataStore + JSON（folders / progress / prefs 三个 key）
         │   ├── VideoScanner.kt         # SAF 递归扫描 + 时长分辨率探测
         │   ├── LibraryRepository.kt    # 分组管理 / 扫描编排 / 播放进度
-        │   └── ThumbnailLoader.kt      # 缩略图取帧 + 内存 LRU
+        │   ├── ThumbnailLoader.kt      # 缩略图取帧 + 内存 LRU
+        │   └── UpdateController.kt     # 检查更新 / 下载 / 调起安装器
         ├── player/
         │   ├── PlaybackService.kt      # MediaSessionService（后台播放的载体）
         │   ├── PlaybackController.kt   # MediaController 封装 → Compose state
@@ -221,13 +233,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.7.1-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.7.1-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.0-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.7.1-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.8.0-release.apk
 ```
 
 ### 签名
@@ -248,14 +260,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.7.1          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.7.1  # 推上去即触发编译
+git tag v1.8.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.8.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.7.1.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.8.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -291,7 +303,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.7.1-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -380,9 +392,13 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 
 - **不支持画中画（PiP）**。需求里没提，加进来会让 Activity 的生命周期与
   Surface 归属复杂一大截，不值得。
-- **不联网、不做在线播放**。这是本地播放器，输入只有 SAF 授权目录。
+- **不做在线播放**。输入只有 SAF 授权目录；联网仅限「检查更新」这一个手动动作，
+  不上传任何数据。
+- **应用内更新在 F-Droid 版上不可用**：F-Droid 用自己的密钥签名，与 GitHub / 本地包
+  不同，装上必然失败。代码按安装来源识别 F-Droid 并提前拦住。
 - **零运行时权限**：目录走 SAF，防熄屏走 Window flag，都不需要权限。
   Android 13+ 不申请通知权限，代价是通知栏里没有播放控件（后台播放本身不受影响）。
+  在线更新引入的 `INTERNET` / `REQUEST_INSTALL_PACKAGES` 都是安装期权限，同样不弹框。
 - **格式支持取决于设备解码器**。ExoPlayer 自带 mp4 / mkv / webm 的软解与封装支持，
   但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器。
   播不了会给分类后的错误提示，不是静默黑屏。
@@ -443,6 +459,8 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **v1.7.1（实时预览 + 幅度可配）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   Kotlin 编译零警告；CI Run 11 成功，Release 附件 `QingYing-v1.7.1.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。节流实时 seek 的流畅度尚未真机复核
+- **v1.8.0（应用内更新）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。检查 / 下载 / 安装整条链路尚未在真机跑通
 
 **未验证：**
 
@@ -461,8 +479,15 @@ UI 通过 `MediaController` 遥控（`SessionToken` + 同进程绑定）。
 - **左右滑与上下滑的轴向分流**：斜向拖动时谁先越过 slop 决定走哪条路，
   真机上是否会出现「想调音量却跳了进度」
 - **节流实时 seek 的实际流畅度**：180ms 一次在低端机上是否仍会顿、拖动时音频是否断续
+- **应用内更新的完整链路**：GitHub API 解析、`DownloadManager` 下载、`FileProvider`
+  调起安装器、「安装未知应用」授权回来后的重试，全都还没在真机跑过
 
 建议装机后重点确认这几处：
+
+- **检查更新**：设置 → 关于 → 检查更新 → 当前已是最新时应显示「已是最新版本」；
+  把 `versionName` 临时改低再打一个包，可验证「发现新版本」这条分支
+- **下载安装**：点「下载并安装」→ 通知栏出现下载进度 → 完成后弹出系统安装器 →
+  覆盖安装成功；首次应被引导去打开「安装未知应用」，回来重试应能继续
 
 - **全屏手势**：左半屏上下滑 → 音量变化并显示百分比；右半屏上下滑 → 亮度变化；
   退出播放页后亮度应回到系统设置；拖动进度条时不应误触发音量/亮度

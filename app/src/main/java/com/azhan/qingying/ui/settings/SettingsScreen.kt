@@ -33,11 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.azhan.qingying.AppContainer
 import com.azhan.qingying.BuildConfig
 import com.azhan.qingying.data.SleepAction
+import com.azhan.qingying.data.UpdateState
 import com.azhan.qingying.player.PlaybackController
 import com.azhan.qingying.ui.neu.NeuButton
 import com.azhan.qingying.ui.neu.NeuSegmented
@@ -218,10 +220,79 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "只播放你手机里已有的视频，不联网、不上传、不申请存储权限。" +
+                text = "只播放你手机里已有的视频，不上传、不申请存储权限。" +
                     "视频目录通过系统文件选择器授权，随时可以在列表里移除。",
                 color = palette.textSecondary,
                 fontSize = 11.sp,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            when (val update = container.updater.state) {
+                is UpdateState.Idle -> NeuButton(
+                    onClick = { container.updater.check(BuildConfig.VERSION_NAME) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("检查更新", color = palette.textPrimary, fontSize = 13.sp)
+                }
+
+                is UpdateState.Checking -> UpdateHint("正在检查…")
+                is UpdateState.UpToDate -> UpdateHint("已是最新版本")
+                is UpdateState.Downloading -> UpdateHint("正在下载，完成后会自动打开安装器…")
+                is UpdateState.Installing -> UpdateHint("已打开安装器，按系统提示完成安装")
+                is UpdateState.Blocked -> UpdateHint(update.message)
+
+                is UpdateState.Failed -> {
+                    UpdateHint("检查失败：${update.message}")
+                    Spacer(Modifier.height(6.dp))
+                    NeuButton(
+                        onClick = { container.updater.check(BuildConfig.VERSION_NAME) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("重试", color = palette.textPrimary, fontSize = 13.sp)
+                    }
+                }
+
+                is UpdateState.Available -> {
+                    Text(
+                        text = "发现新版本 v${update.info.versionName}",
+                        color = palette.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (update.info.notes.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = update.info.notes,
+                            color = palette.textSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NeuButton(
+                            onClick = { container.updater.downloadAndInstall(update.info) },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("下载并安装", color = palette.textPrimary, fontSize = 13.sp)
+                        }
+                        NeuButton(
+                            onClick = { container.updater.reset() },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("稍后", color = palette.textSecondary, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "检查更新是本应用唯一的联网行为：只在点按钮时访问 GitHub，不同步任何数据。",
+                color = palette.textSecondary,
+                fontSize = 10.sp,
             )
         }
 
@@ -263,6 +334,12 @@ private fun SettingCard(
             }
         }
     }
+}
+
+@Composable
+private fun UpdateHint(text: String) {
+    val palette = LocalNeuPalette.current
+    Text(text, color = palette.textSecondary, fontSize = 11.sp)
 }
 
 @Composable

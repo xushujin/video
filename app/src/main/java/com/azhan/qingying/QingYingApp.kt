@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.azhan.qingying.data.LibraryRepository
 import com.azhan.qingying.data.ThumbnailLoader
+import com.azhan.qingying.data.UpdateController
 import com.azhan.qingying.data.VideoScanner
 import com.azhan.qingying.data.VideoStore
 import com.azhan.qingying.player.PlaybackController
@@ -34,6 +35,8 @@ class AppContainer(context: Context) {
     val player: PlaybackController by lazy { PlaybackController(appContext) }
 
     val sleepTimer: SleepTimer by lazy { SleepTimer(player, appScope) }
+
+    val updater: UpdateController by lazy { UpdateController(appContext, appScope) }
 
     init {
         // 播放进度回写（内部有防抖，见 LibraryRepository.saveProgress）

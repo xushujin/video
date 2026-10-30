@@ -1,0 +1,10 @@
+Added an in-app update check.
+
+* Settings - About - Check for updates reads the latest GitHub release and shows
+  its version and notes when a newer build exists
+* The APK is downloaded by the system download manager and handed to the system
+  installer; the first time you need to allow installing unknown apps
+* The app touches the network only when you tap that button - nothing is checked
+  at startup or in the background, and nothing is uploaded
+* On F-Droid builds the button refuses politely: F-Droid signs with its own key,
+  so a GitHub build cannot be installed over it

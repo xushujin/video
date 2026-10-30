@@ -12,7 +12,7 @@ fdroid/metadata/
     ├── title.txt                              # 应用名
     ├── short_description.txt                  # 摘要（≤ 80 字符）
     ├── full_description.txt                   # 完整描述（≤ 4000 字符）
-    └── changelogs/1.txt … 9.txt               # 每个 versionCode 一份更新日志
+    └── changelogs/1.txt … 10.txt              # 每个 versionCode 一份更新日志
 ```
 
 与 fdroiddata 仓库的结构一致，整个 `metadata/` 目录可以直接复制过去。
@@ -77,7 +77,7 @@ F-Droid 的 CI 会自动跑构建检查，维护者会 review。
 | **应用图标** | 从 `app/src/main/res/` 导出 512×512 PNG，放到 `en-US/images/icon.png` |
 | **截图** | 建议 3–5 张（分组列表、播放页竖屏、播放页横屏、倒计时面板、设置页），放 `en-US/images/phoneScreenshots/1.png` 等 |
 | **作者名** | `.yml` 里现在填的是 GitHub 用户名 `xushujin`，想用真名自行替换 |
-| **每个新 versionCode 一份 changelog** | 否则 F-Droid 会用空白的更新说明（目前 `1.txt`–`9.txt` 已就位，对应 versionCode 1–9） |
+| **每个新 versionCode 一份 changelog** | 否则 F-Droid 会用空白的更新说明（目前 `1.txt`–`10.txt` 已就位，对应 versionCode 1–10） |
 
 截图需要装机后自己截 —— 这是唯一我没法代劳的部分。
 
@@ -91,6 +91,11 @@ F-Droid 的 CI 会自动跑构建检查，维护者会 review。
 
 **自动更新已配好。** `.yml` 里设了 `AutoUpdateMode: Version` 与 `UpdateCheckMode: Tags`，
 以后打 tag 推送后，F-Droid 会自动检测到新版本并构建，不需要再提 MR。
+
+**应用自带的更新入口在 F-Droid 版上是关闭的。** 代码按安装来源识别 `org.fdroid.fdroid`，
+命中就提示改用 F-Droid 更新 —— 两边签名不同，装上去必然 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
+如果评审时 F-Droid 要求彻底移除自带更新（部分维护者持这个立场），把「关于」卡片里那块
+UI 去掉即可，`UpdateController.kt` 可以整文件删除，不影响其他功能。
 
 **构建环境是个未知数。** 本项目用 AGP 9.4.1 + `compileSdk = 37`，要求 JDK 17 与
 `platforms;android-37.0`。F-Droid 的构建服务器是否装了对应版本，**我无法在本地确认** ——

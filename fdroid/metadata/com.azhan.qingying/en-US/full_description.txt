@@ -56,6 +56,8 @@ already on your phone. No account, no network, no ads, no runtime permissions.
   playback continues muted instead of stopping, and you are told once
 * RealMedia (.rmvb) is not supported at all - the container has no extractor and
   phones have no RealVideo decoder, so those files need converting
+* Update checks are disabled in F-Droid builds: this version is signed by F-Droid,
+  so builds from elsewhere cannot be installed over it
 * Picture-in-picture is not implemented
 * The F-Droid build is signed with F-Droid's own key, so it cannot upgrade a
   copy installed from GitHub Releases - uninstall that copy first

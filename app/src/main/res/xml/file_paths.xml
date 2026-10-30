@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用内更新下载的 APK 落在 getExternalFilesDir(DIRECTORY_DOWNLOADS)，
+  对应 <external-files-path>。只暴露这一个子目录，不开放其他路径。
+-->
+<paths>
+    <external-files-path name="updates" path="Download/" />
+</paths>
