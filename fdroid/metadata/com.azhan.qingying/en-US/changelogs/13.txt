@@ -1,0 +1,6 @@
+The download now shows progress inside the app.
+
+* A progress bar and percentage appear in Settings while the update downloads,
+  instead of only the text "downloading"
+* Progress is read from the system download manager every 400 ms
+* If the server does not report a total size, the app falls back to plain text

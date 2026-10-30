@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.8.2**（`versionCode = 12`，`versionName = "1.8.2"`，tag `v1.8.2`）
+- 版本 **v1.8.3**（`versionCode = 13`，`versionName = "1.8.3"`，tag `v1.8.3`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 25 个 Kotlin 文件、约 6000 行
 - release APK 约 **2.2 MB**
@@ -148,7 +148,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 
 - 设置 → 关于 → 「检查更新」：读 GitHub Releases 的最新 tag，与 `versionName` 比，
   有新版就列出更新说明和「下载并安装」
-- 下载交给系统 `DownloadManager`（通知栏有进度），完成后用 `FileProvider` 交给系统安装器
+- 下载交给系统 `DownloadManager`（通知栏有进度），**设置页里也有进度条和百分比**：
+  每 400ms 查一次 `COLUMN_BYTES_DOWNLOADED_SO_FAR` / `COLUMN_TOTAL_SIZE_BYTES`，
+  总大小未知时退回纯文案；完成后用 `FileProvider` 交给系统安装器
 - 第一次安装需要允许「安装未知应用」，应用会把你引导到对应的系统设置页
 - **只在点按钮时联网**：启动不检查、后台不轮询。也没有引 OkHttp / Retrofit ——
   一个 `HttpURLConnection` + `org.json` 就够了
@@ -236,13 +238,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.2-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.2-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.3-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.3-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.8.2-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.8.3-release.apk
 ```
 
 ### 签名
@@ -263,14 +265,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.8.2          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.8.2  # 推上去即触发编译
+git tag v1.8.3          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.8.3  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.8.2.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.8.3.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -306,7 +308,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.2-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.3-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -484,6 +486,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 14 成功，Release 附件 `QingYing-v1.8.2.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。修复点是「检查成功进入 UpToDate 后没有出口」，
   已按状态逐个补齐
+- **v1.8.3（下载进度条）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。进度依赖 `DownloadManager` 的字节数，尚未在真机观察过跳变
 
 **未验证：**
 
@@ -512,8 +516,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
 - **检查更新**：设置 → 关于 → 检查更新 → 当前已是最新时应显示「已是最新版本」；
   **按钮不能消失**，应能连续点第二次；把 `versionName` 临时改低再打一个包，
   可验证「发现新版本」这条分支
-- **下载安装**：点「下载并安装」→ 通知栏出现下载进度 → 完成后弹出系统安装器 →
-  覆盖安装成功；首次应被引导去打开「安装未知应用」，回来重试应能继续
+- **下载安装**：点「下载并安装」→ 设置页应出现进度条与百分比（同时通知栏也有进度）→
+  完成后弹出系统安装器 → 覆盖安装成功；首次应被引导去打开「安装未知应用」，
+  回来点「继续安装」应能接着装
 
 - **全屏手势**：左半屏上下滑 → 音量变化并显示百分比；右半屏上下滑 → 亮度变化；
   退出播放页后亮度应回到系统设置；拖动进度条时不应误触发音量/亮度

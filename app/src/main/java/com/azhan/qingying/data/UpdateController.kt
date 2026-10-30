@@ -35,7 +35,8 @@ sealed interface UpdateState {
     data object Checking : UpdateState
     data object UpToDate : UpdateState
     data class Available(val info: UpdateInfo) : UpdateState
-    data object Downloading : UpdateState
+    /** [progress] 为 0..100；-1 表示总大小未知（服务端没给 Content-Length）。 */
+    data class Downloading(val progress: Int) : UpdateState
     data object Installing : UpdateState
     data class Failed(val message: String) : UpdateState
     /** [pending] 非空表示「有包要装，但被系统拦住了」，用户可以点继续安装。 */
@@ -93,7 +94,7 @@ class UpdateController(
             return
         }
         scope.launch {
-            state = UpdateState.Downloading
+            state = UpdateState.Downloading(progress = -1)
             runCatching {
                 val file = apkFile(info.versionName)
                 if (file.exists()) file.delete()
@@ -162,11 +163,14 @@ class UpdateController(
     private suspend fun awaitDownload(id: Long, file: File) {
         val manager = context.getSystemService(DownloadManager::class.java)
         val deadline = System.currentTimeMillis() + DOWNLOAD_TIMEOUT_MS
+        var lastProgress = Int.MIN_VALUE
         while (System.currentTimeMillis() < deadline) {
-            delay(600)
+            // 400ms 轮询一次：进度条够顺滑，又不至于把主线程刷爆
+            delay(400)
             manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
                 if (!cursor.moveToFirst()) return@use
-                when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
                         install(file)
                         return
@@ -176,6 +180,23 @@ class UpdateController(
                         state = UpdateState.Failed("下载失败，请检查网络后重试")
                         return
                     }
+                }
+
+                // 进度：DownloadManager 会同时给已下载字节和总字节，总大小未知时返回 -1
+                val downloaded = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR),
+                )
+                val total = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES),
+                )
+                val progress = if (total > 0L) {
+                    ((downloaded * 100) / total).toInt().coerceIn(0, 100)
+                } else {
+                    -1
+                }
+                if (progress != lastProgress) {
+                    lastProgress = progress
+                    state = UpdateState.Downloading(progress)
                 }
             }
         }

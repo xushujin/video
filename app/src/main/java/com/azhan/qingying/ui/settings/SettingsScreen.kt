@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -244,7 +245,15 @@ fun SettingsScreen(
                     }
                 }
 
-                is UpdateState.Downloading -> UpdateHint("正在下载，完成后会自动打开安装器…")
+                is UpdateState.Downloading -> {
+                    if (update.progress >= 0) {
+                        UpdateHint("正在下载 ${update.progress}%")
+                        Spacer(Modifier.height(6.dp))
+                        UpdateProgressBar(update.progress)
+                    } else {
+                        UpdateHint("正在下载…（总大小未知，完成后会自动打开安装器）")
+                    }
+                }
 
                 is UpdateState.Installing -> {
                     UpdateHint("已打开安装器，按系统提示完成安装；没弹出来就再点一次")
@@ -364,6 +373,25 @@ private fun SettingCard(
 private fun UpdateHint(text: String) {
     val palette = LocalNeuPalette.current
     Text(text, color = palette.textSecondary, fontSize = 11.sp)
+}
+
+@Composable
+private fun UpdateProgressBar(progress: Int) {
+    val palette = LocalNeuPalette.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(palette.divider),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth((progress / 100f).coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .background(palette.accent),
+        )
+    }
 }
 
 @Composable
