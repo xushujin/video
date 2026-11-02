@@ -497,7 +497,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   验签 `CN=QingYing` / `3fa551ff…17ec`。进度依赖 `DownloadManager` 的字节数，
   尚未在真机观察过跳变
 - **v1.9.0（多音轨 / 去浮层 / 锁定）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。音轨切换与锁定交互尚未真机验证
+  Kotlin 编译零警告；CI Run 16 成功，Release 附件 `QingYing-v1.9.0.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`。音轨切换与锁定交互尚未真机验证
 
 **未验证：**
 
