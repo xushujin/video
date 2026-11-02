@@ -28,8 +28,8 @@ android {
         applicationId = "com.azhan.qingying"
         minSdk = 26
         targetSdk = 37
-        versionCode = 15
-        versionName = "1.9.1"
+        versionCode = 16
+        versionName = "1.10.0"
     }
 
     // 只保留中英两种语言资源，顺带把 AndroidX 里其它语种的翻译裁掉。
@@ -62,6 +62,11 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // FFmpeg 的 .so 只保留手机用得到的两个 ABI。
+            // x86 只影响模拟器，为此多背 9 MB 不值得；debug 不限，模拟器照常能跑。
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -69,6 +74,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+    }
+
+    // FFmpeg 的 .so 有 15 MB（两个 ABI 未压缩）。默认 APK 会把 .so 原样存进去，
+    // 体积直接飙到 17 MB；改成传统打包（压缩 .so，安装时解出来）能砍掉近一半。
+    // 代价是安装时多花一点时间、占用一点存储，换来下载包小得多。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
@@ -131,6 +145,10 @@ dependencies {
     // UI 通过 MediaController 遥控（含把 SurfaceView 交给播放器渲染）。
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
+
+    // 软件解码：给系统没有解码器的音轨（AC3 / EAC3 / DTS / TrueHD / MP2）兜底。
+    // 注意：nextlib 是 GPL-3.0，所以本应用整体也按 GPL-3.0 发布（见 LICENSE）。
+    implementation(libs.nextlib.media3ext)
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.documentfile)

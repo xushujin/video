@@ -5,11 +5,13 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.azhan.qingying.MainActivity
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 
 /**
  * 后台播放服务 —— 需求 2 的实现基础。
@@ -28,14 +30,24 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
 
+    /** 解码器管理器：持有它才能在销毁时 detach，也用于运行时切换解码模式。 */
+    private var decoderManager: DecoderManager? = null
+
     override fun onCreate() {
         super.onCreate()
 
         // 首选解码器失败时自动换下一个候选（enableDecoderFallback 默认是关的）。
         // 配合 SwitchableCodecSelector，还能在运行时整体切成「音频软解优先」。
-        val renderersFactory = DefaultRenderersFactory(this)
-            .setEnableDecoderFallback(true)
+        //
+        // NextRenderersFactory 额外挂了一条 FFmpeg 兜底：
+        // AUTO = 硬解 → 系统 C2 软解 → 内置 FFmpeg，AC3 / DTS / TrueHD 这类
+        // 系统压根没有解码器的音轨就靠最后这一级。
+        val manager = DecoderManager(DecoderMode.AUTO, DecoderMode.AUTO)
+        decoderManager = manager
+        val renderersFactory = NextRenderersFactory(this)
+            .setDecoderManager(manager)
             .setMediaCodecSelector(SwitchableCodecSelector())
+            .setEnableDecoderFallback(true)
 
         val player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
@@ -52,6 +64,9 @@ class PlaybackService : MediaSessionService() {
             .setSeekBackIncrementMs(15_000L)
             .setSeekForwardIncrementMs(15_000L)
             .build()
+
+        // 必须在 prepare 之前 attach：它要接管轨道选择与解码器切换
+        manager.attach(player)
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -79,6 +94,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        // 先 detach 再释放播放器，否则管理器会留着一个已经死掉的引用
+        decoderManager?.detach()
+        decoderManager = null
         mediaSession?.run {
             player.release()
             release()

@@ -3,10 +3,10 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.9.1**（`versionCode = 15`，`versionName = "1.9.1"`，tag `v1.9.1`）
+- 版本 **v1.10.0**（`versionCode = 16`，`versionName = "1.10.0"`，tag `v1.10.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 26 个 Kotlin 文件、约 6400 行
-- release APK 约 **2.2 MB**
+- release APK 约 **8.7 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
 
 ---
 
@@ -107,6 +107,8 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **音轨解不了时分级降级**：先切**音频软解**重试一次（厂商硬解实现有问题时，系统自带的
   C2 软解往往能解），软解也失败才关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
   只对当前视频生效，切到别的视频会交还硬解、并重新打开音频轨
+- **系统没有的音轨也能放**：内置 FFmpeg 软解（nextlib），AC3 / EAC3 / DTS / TrueHD / MP2
+  这类系统不支持的音轨自动落到软解；有硬件解码器时仍优先硬解，不会平白多耗电
 - **静默失败的兜底**：还有一类文件根本不报错 —— ExoPlayer 直接把解不了的音轨排除掉，
   画面正常、全程无声。READY 时会检查「有音轨但一条都没选中」，弹出带编码名的提示
   （如「音轨（AC3）本机解不了」），这样至少知道该换音轨还是该转码
@@ -247,13 +249,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.9.1-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.9.1-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.0-release.apk` | **8.7 MB**（含 FFmpeg） |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.10.0-debug.apk` | 约 30 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.9.1-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.10.0-release.apk
 ```
 
 ### 签名
@@ -274,14 +276,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.9.1          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.9.1  # 推上去即触发编译
+git tag v1.10.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.10.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.9.1.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.10.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -317,7 +319,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.9.1-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.10.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -428,9 +430,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
 - **格式支持取决于设备解码器**。ExoPlayer 自带 mp4 / mkv / webm 的软解与封装支持，
   但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器。
   播不了会给分类后的错误提示，不是静默黑屏。
-  - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2），MIME 同样是 `audio/mpeg`，
-    系统能力检查报「支持」但真解码时失败（`ERROR_CODE_DECODING_FAILED`）。
-    v1.5.0 起会自动降级为静音播放；v1.8.1 起先尝试切系统软解，仍失败才静音
+  - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2）或 AC3，MIME 可能报「支持」
+    但真解码失败。v1.8.1 起先切系统软解，v1.10.0 起内置 FFmpeg 兜底，这类音轨能正常出声
   - **RMVB 是真的不支持**：ExoPlayer 没有 RealMedia 提取器，手机也基本没有 RealVideo 解码器，
     静音降级也救不回来，只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
 - **时长 / 分辨率探测是逐个文件做的**，超大目录首次展开会看到「正在读取时长…」停留一会儿。
@@ -506,6 +507,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 17 成功，Release 附件 `QingYing-v1.9.1.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`，并确认 dex 里包含新提示文案。
   需要一条「编码不被支持」的样本来验证提示是否弹出
+- **v1.10.0（FFmpeg 软解）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告；APK 8.7 MB，只含 arm64-v8a / armeabi-v7a，`.so` 已压缩。
+  **AC3 是否真的出声还没在真机验证** —— 这是这一版最需要确认的事
 
 **未验证：**
 
@@ -549,6 +553,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   自动连播到下一集后应回到默认音轨
 - **没声音的文件**：应弹出「音轨（XXX）本机解不了」的提示。提示里的编码如果是
   AC3 / DTS / MP2，说明系统里根本没有该解码器 —— 换音轨或转码，不是播放器的 bug
+- **AC3 音轨（v1.10.0）**：放之前那个剧场版 → 应能正常出声、提示不再出现；
+  若仍提示「AC3 解不了」，说明 FFmpeg 渲染器没被选中，需要抓日志看 `NextRenderersFactory`
 - **锁定**：横屏点锁 → 控件消失、滑动不再改音量/亮度/进度；
   点左下角「已锁定」应解锁并恢复控件；转回竖屏应自动解锁
 - **音轨降级**：找一个音轨是 MP2 的 AVI → 应先切软解重试；软解也不行才提示「已静音播放」，
@@ -648,3 +654,22 @@ GitHub Secrets 名或「讨论旧写法」的语境。
 
 **文档里的每一个具体名字，都要能被指到代码里的同一处。**
 指不到就删掉或标注「尚未落地」—— 宁可少写，不要写错。
+
+---
+
+## 许可证
+
+本项目按 **GPL-3.0-only** 发布，全文见 `LICENSE`。
+
+改许可证的原因只有一个：**软解**。`nextlib-media3ext` 把 FFmpeg 的解码器打包成 AAR，
+自身是 GPL-3.0；按 GPL 的要求，链接它的应用整体也必须以 GPL 发布。
+如果以后换成自己用 `--disable-gpl` 编译的 LGPL 版 FFmpeg 扩展，可以再改回 Apache-2.0。
+
+| 组件 | 用途 | 许可证 |
+|---|---|---|
+| AndroidX / media3 | UI、播放内核 | Apache-2.0 |
+| nextlib-media3ext | FFmpeg 软解（AC3 / EAC3 / DTS / TrueHD / MP2） | GPL-3.0 |
+| FFmpeg | 由上述 AAR 打包进来 | 随 nextlib 的构建选项 |
+
+体积也是这项功能的代价：release APK 从 2.2 MB 涨到 **8.7 MB**（只保留 arm64-v8a 与
+armeabi-v7a 两个 ABI，且对 `.so` 启用了压缩打包；不压缩的话是 17 MB）。

@@ -1,0 +1,8 @@
+AC3, DTS and other audio tracks the system cannot decode now play.
+
+* Bundled FFmpeg decoders fill in for codecs the device lacks, so AC3, EAC3, DTS,
+  TrueHD and MP2 audio plays instead of falling back to silence
+* Hardware decoding is still preferred when available, so battery use is unchanged
+  for ordinary AAC/MP3 files
+* The APK grows from about 2 MB to 8.7 MB because of the native decoders
+* The app is now licensed under GPL-3.0, since the decoder library is GPL-3.0
