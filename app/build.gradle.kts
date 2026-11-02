@@ -28,8 +28,8 @@ android {
         applicationId = "com.azhan.qingying"
         minSdk = 26
         targetSdk = 37
-        versionCode = 13
-        versionName = "1.8.3"
+        versionCode = 14
+        versionName = "1.9.0"
     }
 
     // 只保留中英两种语言资源，顺带把 AndroidX 里其它语种的翻译裁掉。

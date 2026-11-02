@@ -16,6 +16,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -97,6 +99,19 @@ class PlaybackController(private val context: Context) {
         private set
 
     /**
+     * 当前媒体的音频轨分组。
+     *
+     * 一个文件通常是一组、组里有多条（比如国配/原声）；UI 按「组 + 组内序号」渲染，
+     * 选中时直接把 override 打到对应的 [Tracks.Group] 上。
+     */
+    var audioGroups by mutableStateOf<List<Tracks.Group>>(emptyList())
+        private set
+
+    /** 是否手动指定过音轨；面板里用它高亮「自动」那一行。 */
+    var audioTrackOverridden by mutableStateOf(false)
+        private set
+
+    /**
      * 音轨已被判定为「解不了」的视频 id。
      *
      * 记下来是为了不再重试：同一个文件重试也不会突然能解，
@@ -172,6 +187,8 @@ class PlaybackController(private val context: Context) {
                 softwareDecodingVideoId = null
                 DecoderPreference.preferSoftwareAudio = false
             }
+            // 音轨 override 也跟着文件走：下一条的轨道布局不一样，沿用会指到不存在的轨道
+            clearAudioTrackOverride()
             currentVideoId = mediaItem?.mediaId
             positionMs = 0L
             durationMs = controller?.duration?.takeIf { it > 0 } ?: 0L
@@ -196,6 +213,11 @@ class PlaybackController(private val context: Context) {
 
         override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
             speed = playbackParameters.speed
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            // 只留音频组：视频轨和字幕轨这里用不上
+            audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
         }
 
         override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -448,6 +470,38 @@ class PlaybackController(private val context: Context) {
                 .buildUpon()
                 .setTrackTypeDisabled(trackType, disabled)
                 .build()
+        }
+    }
+
+    // ------------------------------------------------------------ 音轨选择
+
+    /** 手动选一条音轨。[group] 来自 [audioGroups]，[index] 是组内序号。 */
+    fun selectAudioTrack(group: Tracks.Group, index: Int) {
+        val mediaController = controller ?: return
+        runCatching {
+            mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
+                .buildUpon()
+                // 之前可能因为解码失败把音轨关掉了，手动选轨时要一并打开
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+                .build()
+            audioTrackOverridden = true
+        }
+    }
+
+    /** 交还给播放器自动选轨（通常是默认音轨）。 */
+    fun selectAutomaticAudioTrack() {
+        clearAudioTrackOverride()
+    }
+
+    private fun clearAudioTrackOverride() {
+        val mediaController = controller ?: return
+        runCatching {
+            mediaController.trackSelectionParameters = mediaController.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                .build()
+            audioTrackOverridden = false
         }
     }
 

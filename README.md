@@ -3,9 +3,9 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.8.3**（`versionCode = 13`，`versionName = "1.8.3"`，tag `v1.8.3`）
+- 版本 **v1.9.0**（`versionCode = 14`，`versionName = "1.9.0"`，tag `v1.9.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 25 个 Kotlin 文件、约 6000 行
+- 26 个 Kotlin 文件、约 6400 行
 - release APK 约 **2.2 MB**
 
 ---
@@ -111,8 +111,13 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
   停手 900ms 自动消失。亮度只改**当前窗口**（`Window.screenBrightness`），
   不需要 `WRITE_SETTINGS`，离开播放页自动交还系统；音量走 `AudioManager` 的音乐流
 - **左右滑快进快退**：在画面上横向拖动，**拖动过程中画面就跟着跳**（节流 180ms 一次），
-  抬手再补一次精确位置。中央浮层显示 `+0:15` 和目标位置（`12:34 / 45:00`）。
+  抬手再补一次精确位置。**不显示中央浮层** —— 进度提示会挡住画面，位置变化本身已经够直观。
   节流是必须的：每一帧都 seek 会让解码器反复 flush + 走 MediaSession 的 IPC，反而卡成幻灯片
+- **多音轨切换**：MKV / AVI 里有多条音轨（国配 / 原声 / 评论）时，顶栏出现「音轨」按钮，
+  面板里列出每条轨的编码、声道数、码率，可以选「自动（默认）」或指定某一条；
+  换到下一个文件时 override 自动清掉，不会指到不存在的轨道
+- **全屏锁定**：横屏顶栏有锁按钮。锁定后**所有触摸都不响应**（音量 / 亮度 / 进度 / 显隐控件），
+  只留左下角一个「已锁定」胶囊，点它解锁；转回竖屏会自动解锁
 - **幅度可配**：设置 → 播放 → 滑动快进幅度，整屏对应 **30 秒 / 1 / 2 / 5 分钟**（默认 2 分钟）；
   短片仍按片长收缩，不会一划就到底
 - 上下滑与左右滑按**轴向分流**：横向位移先超过 touch slop 就是调进度，
@@ -197,6 +202,7 @@ video/
         │   ├── player/
         │   │   ├── PlayerScreen.kt     # 画面 / 横竖屏控件 / 生命周期 / 防熄屏
         │   │   ├── SegmentLoopPanel.kt # 片段循环面板（A/B 点、循环开关）
+        │   │   ├── AudioTrackPanel.kt  # 音轨选择面板
         │   │   └── SleepTimerPanel.kt  # 倒计时面板（预设 + 自定义）
         │   └── settings/SettingsScreen.kt
         └── util/
@@ -238,13 +244,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.8.3-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.8.3-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.9.0-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.9.0-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.8.3-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.9.0-release.apk
 ```
 
 ### 签名
@@ -265,14 +271,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.8.3          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.8.3  # 推上去即触发编译
+git tag v1.9.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.9.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.8.3.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.9.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -308,7 +314,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.8.3-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.9.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -490,6 +496,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 15 成功，Release 附件 `QingYing-v1.8.3.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。进度依赖 `DownloadManager` 的字节数，
   尚未在真机观察过跳变
+- **v1.9.0（多音轨 / 去浮层 / 锁定）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。音轨切换与锁定交互尚未真机验证
 
 **未验证：**
 
@@ -512,6 +520,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   调起安装器、「安装未知应用」授权回来后的重试，全都还没在真机跑过
 - **音频软解回退是否真的生效**：需要一条「硬解失败、系统软解能解」的样本；
   另外 `MediaCodecSelector` 只在 prepare 时重新查询，重试链路是否真换掉解码器要真机确认
+- **多音轨切换**：需要一条真的有多条音轨的 MKV / AVI；override 是否立即生效、
+  下一条视频是否回到自动选轨，都要真机确认
 
 建议装机后重点确认这几处：
 
@@ -524,9 +534,13 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
 
 - **全屏手势**：左半屏上下滑 → 音量变化并显示百分比；右半屏上下滑 → 亮度变化；
   退出播放页后亮度应回到系统设置；拖动进度条时不应误触发音量/亮度
-- **左右滑**：横向拖动 → 画面**跟着手指跳**、中央显示 `+0:15` 与目标时间，抬手后停在精确位置；
+- **左右滑**：横向拖动 → 画面**跟着手指跳**，但**不应出现**中央的 `+0:15` 浮层；
   设置里把幅度改成 30 秒 / 5 分钟后，同样一段拖动应给出明显不同的跨度；
   竖着滑仍然是音量/亮度；拖动进度条时不应触发
+- **音轨**：放一个多音轨文件 → 顶栏出现「音轨」→ 选中另一条应立即换声；
+  自动连播到下一集后应回到默认音轨
+- **锁定**：横屏点锁 → 控件消失、滑动不再改音量/亮度/进度；
+  点左下角「已锁定」应解锁并恢复控件；转回竖屏应自动解锁
 - **音轨降级**：找一个音轨是 MP2 的 AVI → 应先切软解重试；软解也不行才提示「已静音播放」，
   画面正常；切到下一集后声音应恢复。错误卡片里的「解码器：xxx」要能看出是哪条解码器挂的
 - **错误分类**：放一个 RMVB → 应提示「容器不支持」而不是笼统的「编码不支持」

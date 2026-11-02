@@ -1,0 +1,11 @@
+Audio track selection, a cleaner seek gesture, and a screen lock.
+
+* Files with several audio tracks (dubbed, original, commentary) now show an
+  Audio button in the top bar; pick a track, or go back to automatic
+* The choice is dropped when the next video starts, so it never points at a track
+  that does not exist there
+* Swiping left or right no longer draws the time overlay in the middle of the
+  screen - the picture itself follows your finger
+* A lock button in full screen disables every touch: volume, brightness, seeking
+  and the controls. Tap the "locked" pill in the bottom-left corner to unlock;
+  rotating back to portrait unlocks as well

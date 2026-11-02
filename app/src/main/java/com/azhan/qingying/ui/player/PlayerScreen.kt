@@ -35,11 +35,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -131,6 +133,15 @@ fun PlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var showSleepPanel by remember { mutableStateOf(false) }
     var showLoopPanel by remember { mutableStateOf(false) }
+    var showAudioPanel by remember { mutableStateOf(false) }
+
+    // 全屏锁定：锁上后所有触摸都不再响应，只留左下角一个解锁按钮
+    var locked by remember { mutableStateOf(false) }
+
+    // 锁定只针对全屏（横屏）；转回竖屏自动解锁，免得在竖屏里找不到解锁入口
+    LaunchedEffect(isLandscape) {
+        if (!isLandscape) locked = false
+    }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
@@ -262,19 +273,24 @@ fun PlayerScreen(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
+                .pointerInput(locked) {
+                    // 锁定后画面不响应任何触摸，避免误触
+                    if (locked) return@pointerInput
                     detectTapGestures { controlsVisible = !controlsVisible }
                 }
-                .pointerInput(showSleepPanel, showLoopPanel, seekSpanMs) {
-                    // 面板开着时不接管手势，否则在面板空白处拖动会误调音量/亮度
-                    if (showSleepPanel || showLoopPanel) return@pointerInput
+                .pointerInput(showSleepPanel, showLoopPanel, showAudioPanel, seekSpanMs, locked) {
+                    // 面板开着或已锁定时不接管手势，否则在面板空白处拖动会误调音量/亮度
+                    if (locked || showSleepPanel || showLoopPanel || showAudioPanel) {
+                        return@pointerInput
+                    }
 
                     var totalDx = 0f
                     var startPosition = 0L
                     var pendingSeek: Long? = null
                     var lastLiveSeekAt = 0L
 
-                    // 左右滑：快进 / 快退。
+                    // 左右滑：快进 / 快退。不给浮层提示 —— 用户要的是「画面直接跟着走」，
+                    // 中央那块 +/- 时间和进度条反而挡住画面。
                     // 与上下滑并存靠「轴向 slop 谁先越过」自然分流：
                     // 横向检测器在竖向移动超过 slop 时自行取消，反之亦然。
                     detectHorizontalDragGestures(
@@ -294,12 +310,6 @@ fun PlayerScreen(
                             val delta = (totalDx / width * span).toLong()
                             val target = (startPosition + delta).coerceIn(0L, duration)
                             pendingSeek = target
-                            gestureHud = GestureHud(
-                                kind = GestureKind.SEEK,
-                                value = target.toFloat() / duration,
-                                seekDeltaMs = target - startPosition,
-                                seekTargetMs = target,
-                            )
                             // 实时跳，但节流：每一帧都 seek 会把解码器打爆（每次都要 flush + 走 IPC）。
                             // 180ms 一次，画面能跟着走，又不会卡成幻灯片。
                             val now = SystemClock.elapsedRealtime()
@@ -316,7 +326,10 @@ fun PlayerScreen(
                         onDragCancel = { pendingSeek = null },
                     )
                 }
-                .pointerInput(showSleepPanel, showLoopPanel) {
+                .pointerInput(showSleepPanel, showLoopPanel, showAudioPanel, locked) {
+                    if (locked || showSleepPanel || showLoopPanel || showAudioPanel) {
+                        return@pointerInput
+                    }
 
                     var totalDy = 0f
                     var startVolume = 0f
@@ -337,9 +350,6 @@ fun PlayerScreen(
                                     .getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
 
                                 GestureKind.BRIGHTNESS -> startBrightness = currentWindowBrightness(context)
-
-                                // 竖向手势只会是上面两种，SEEK 走横向检测器
-                                GestureKind.SEEK -> Unit
                             }
                         },
                         onVerticalDrag = { change, dragAmount ->
@@ -370,8 +380,7 @@ fun PlayerScreen(
                                     gestureHud = GestureHud(GestureKind.BRIGHTNESS, target)
                                 }
 
-                                GestureKind.SEEK, null -> Unit
-                            }
+                                null -> Unit                            }
                         },
                         onDragEnd = { kind = null },
                         onDragCancel = { kind = null },
@@ -478,7 +487,7 @@ fun PlayerScreen(
         }
 
         // ---------------- 控件层
-        if (controlsVisible) {
+        if (controlsVisible && !locked) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -501,14 +510,29 @@ fun PlayerScreen(
                     },
                     loopActive = player.loopActive,
                     compact = isLandscape,
+                    audioVisible = player.audioGroups.sumOf { it.length } > 1,
                     onBack = onBack,
                     onSleepClick = {
                         showSleepPanel = !showSleepPanel
                         showLoopPanel = false
+                        showAudioPanel = false
                     },
                     onLoopClick = {
                         showLoopPanel = !showLoopPanel
                         showSleepPanel = false
+                        showAudioPanel = false
+                    },
+                    onAudioClick = {
+                        showAudioPanel = !showAudioPanel
+                        showSleepPanel = false
+                        showLoopPanel = false
+                    },
+                    onLockClick = {
+                        locked = true
+                        controlsVisible = false
+                        showSleepPanel = false
+                        showLoopPanel = false
+                        showAudioPanel = false
                     },
                 )
 
@@ -571,11 +595,53 @@ fun PlayerScreen(
                         )
                     }
                 }
+
+                if (showAudioPanel) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        AudioTrackPanel(
+                            player = player,
+                            onClose = { showAudioPanel = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+
+        // 锁定后唯一还能点的东西：左下角的解锁胶囊
+        if (locked) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(start = 16.dp, bottom = 16.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable {
+                        locked = false
+                        controlsVisible = true
+                    }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("已锁定", color = Color.White, fontSize = 11.sp)
             }
         }
 
         // 手势 HUD 画在最上层：控件层带 34% 黑底，放在它下面会被压暗
-        gestureHud?.let { hud -> GestureHudOverlay(hud, player.durationMs) }
+        gestureHud?.let { hud -> GestureHudOverlay(hud) }
     }
 }
 
@@ -589,8 +655,8 @@ private fun setKeepScreenOn(context: android.content.Context, on: Boolean) {
     }
 }
 
-/** 手势调节的对象：左半屏音量、右半屏亮度、横向拖动进度。 */
-private enum class GestureKind { VOLUME, BRIGHTNESS, SEEK }
+/** 手势调节的对象：左半屏音量、右半屏亮度。 */
+private enum class GestureKind { VOLUME, BRIGHTNESS }
 
 /**
  * 手势 HUD 的状态。
@@ -600,12 +666,8 @@ private enum class GestureKind { VOLUME, BRIGHTNESS, SEEK }
  */
 private data class GestureHud(
     val kind: GestureKind,
-    /** 音量 / 亮度是 0..1；进度是目标位置占全片的比例。 */
+    /** 音量 / 亮度是 0..1。 */
     val value: Float,
-    /** 仅 SEEK 用：相对拖动起点的偏移，正数快进。 */
-    val seekDeltaMs: Long = 0L,
-    /** 仅 SEEK 用：拖动结束时会跳到这个位置。 */
-    val seekTargetMs: Long = 0L,
     val stamp: Long = SystemClock.elapsedRealtime(),
 )
 
@@ -637,9 +699,9 @@ private fun applyWindowBrightness(context: Context, value: Float) {
 /** 亮度下限：0 会让屏幕全黑，用户会以为应用挂了。 */
 private const val MIN_BRIGHTNESS = 0.02f
 
-/** 音量 / 亮度 / 进度手势的中央浮层。 */
+/** 音量 / 亮度手势的中央浮层。进度不提示，所以这里只有这两种。 */
 @Composable
-private fun GestureHudOverlay(hud: GestureHud, durationMs: Long) {
+private fun GestureHudOverlay(hud: GestureHud) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
@@ -648,55 +710,24 @@ private fun GestureHudOverlay(hud: GestureHud, durationMs: Long) {
                 .padding(horizontal = 22.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (hud.kind == GestureKind.SEEK) {
-                Icon(
-                    imageVector = if (hud.seekDeltaMs >= 0L) {
-                        Icons.Rounded.FastForward
-                    } else {
-                        Icons.Rounded.FastRewind
-                    },
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = buildString {
-                        append(if (hud.seekDeltaMs >= 0L) "+" else "-")
-                        append(formatMark(abs(hud.seekDeltaMs)))
-                    },
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "${formatMark(hud.seekTargetMs)} / ${formatMark(durationMs)}",
-                    color = Color.White.copy(alpha = 0.72f),
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                HudBar(hud.value)
-            } else {
-                Icon(
-                    imageVector = when {
-                        hud.kind == GestureKind.BRIGHTNESS -> Icons.Rounded.BrightnessHigh
-                        hud.value <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
-                        else -> Icons.AutoMirrored.Rounded.VolumeUp
-                    },
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(Modifier.height(8.dp))
-                HudBar(hud.value)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "${(hud.value * 100).roundToInt()}%",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                )
-            }
+            Icon(
+                imageVector = when {
+                    hud.kind == GestureKind.BRIGHTNESS -> Icons.Rounded.BrightnessHigh
+                    hud.value <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
+                    else -> Icons.AutoMirrored.Rounded.VolumeUp
+                },
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            HudBar(hud.value)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${(hud.value * 100).roundToInt()}%",
+                color = Color.White,
+                fontSize = 11.sp,
+            )
         }
     }
 }
@@ -728,9 +759,12 @@ private fun TopBar(
     loopLabel: String,
     loopActive: Boolean,
     compact: Boolean,
+    audioVisible: Boolean,
     onBack: () -> Unit,
     onSleepClick: () -> Unit,
     onLoopClick: () -> Unit,
+    onAudioClick: () -> Unit,
+    onLockClick: () -> Unit,
 ) {
     val palette = LocalNeuPalette.current
     Row(
@@ -783,6 +817,33 @@ private fun TopBar(
             compact = compact,
             onClick = onLoopClick,
         )
+
+        // 只有真的有多条音轨时才出现，单音轨的文件不占位置
+        if (audioVisible) {
+            Spacer(Modifier.width(6.dp))
+            TopCapsule(
+                icon = Icons.Rounded.Audiotrack,
+                label = "音轨",
+                active = false,
+                compact = compact,
+                onClick = onAudioClick,
+            )
+        }
+
+        // 锁定只做在全屏（横屏）里：竖屏本来就没有误触场景，还多一个看不懂的图标
+        if (compact) {
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Rounded.Lock,
+                contentDescription = "锁定屏幕",
+                tint = palette.textPrimary,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onLockClick)
+                    .padding(7.dp),
+            )
+        }
     }
 }
 
