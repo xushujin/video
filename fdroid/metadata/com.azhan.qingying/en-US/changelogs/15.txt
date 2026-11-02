@@ -1,0 +1,8 @@
+A clearer message when a file has no playable audio track.
+
+* Some files do not fail at all: the player simply drops the audio track it cannot
+  decode, so the picture plays in complete silence with no error
+* The player now checks, once the file is ready, whether any audio track was
+  selected, and if not, says which codec was dropped (for example AC3)
+* That tells you whether to pick another audio track or convert the file, instead
+  of wondering why the phone has no sound

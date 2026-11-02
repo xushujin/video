@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.9.0**（`versionCode = 14`，`versionName = "1.9.0"`，tag `v1.9.0`）
+- 版本 **v1.9.1**（`versionCode = 15`，`versionName = "1.9.1"`，tag `v1.9.1`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 26 个 Kotlin 文件、约 6400 行
 - release APK 约 **2.2 MB**
@@ -107,6 +107,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **音轨解不了时分级降级**：先切**音频软解**重试一次（厂商硬解实现有问题时，系统自带的
   C2 软解往往能解），软解也失败才关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
   只对当前视频生效，切到别的视频会交还硬解、并重新打开音频轨
+- **静默失败的兜底**：还有一类文件根本不报错 —— ExoPlayer 直接把解不了的音轨排除掉，
+  画面正常、全程无声。READY 时会检查「有音轨但一条都没选中」，弹出带编码名的提示
+  （如「音轨（AC3）本机解不了」），这样至少知道该换音轨还是该转码
 - **全屏手势**：左半边上下滑调音量，右半边上下滑调亮度，屏幕中央浮出百分比，
   停手 900ms 自动消失。亮度只改**当前窗口**（`Window.screenBrightness`），
   不需要 `WRITE_SETTINGS`，离开播放页自动交还系统；音量走 `AudioManager` 的音乐流
@@ -244,13 +247,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.9.0-release.apk` | **2.2 MB** |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.9.0-debug.apk` | 22 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.9.1-release.apk` | **2.2 MB** |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.9.1-debug.apk` | 22 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.9.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.9.1-release.apk
 ```
 
 ### 签名
@@ -271,14 +274,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.9.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.9.0  # 推上去即触发编译
+git tag v1.9.1          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.9.1  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.9.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.9.1.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -314,7 +317,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.9.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.9.1-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -499,6 +502,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
 - **v1.9.0（多音轨 / 去浮层 / 锁定）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
   Kotlin 编译零警告；CI Run 16 成功，Release 附件 `QingYing-v1.9.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。音轨切换与锁定交互尚未真机验证
+- **v1.9.1（静默无音轨兜底）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
+  Kotlin 编译零警告。需要一条「编码不被支持」的样本来验证提示是否弹出
 
 **未验证：**
 
@@ -540,6 +545,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   竖着滑仍然是音量/亮度；拖动进度条时不应触发
 - **音轨**：放一个多音轨文件 → 顶栏出现「音轨」→ 选中另一条应立即换声；
   自动连播到下一集后应回到默认音轨
+- **没声音的文件**：应弹出「音轨（XXX）本机解不了」的提示。提示里的编码如果是
+  AC3 / DTS / MP2，说明系统里根本没有该解码器 —— 换音轨或转码，不是播放器的 bug
 - **锁定**：横屏点锁 → 控件消失、滑动不再改音量/亮度/进度；
   点左下角「已锁定」应解锁并恢复控件；转回竖屏应自动解锁
 - **音轨降级**：找一个音轨是 MP2 的 AVI → 应先切软解重试；软解也不行才提示「已静音播放」，

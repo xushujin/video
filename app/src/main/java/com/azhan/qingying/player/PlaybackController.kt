@@ -127,6 +127,9 @@ class PlaybackController(private val context: Context) {
      */
     private var softwareDecodingVideoId: String? = null
 
+    /** 已经提示过「没有可用音轨」的视频 id，避免每次 seek 都弹一次。 */
+    private var audioWarningVideoId: String? = null
+
     // ------------------------------------------------------------ 片段循环
     //
     // A 点 / B 点都是「当前视频内」的毫秒位置，[NO_LOOP] 表示没设。
@@ -202,7 +205,11 @@ class PlaybackController(private val context: Context) {
             playbackState = state
             val duration = controller?.duration ?: 0L
             if (duration > 0) durationMs = duration
-            if (state == Player.STATE_READY) playbackError = null
+            if (state == Player.STATE_READY) {
+                playbackError = null
+                // 有些文件根本不报错，只是「没有音轨被选中」—— 必须自己查一遍
+                warnIfAudioUnplayable()
+            }
             if (state == Player.STATE_ENDED) {
                 stopTicker()
                 flushProgress()
@@ -219,7 +226,6 @@ class PlaybackController(private val context: Context) {
             // 只留音频组：视频轨和字幕轨这里用不上
             audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
         }
-
         override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) {
                 // pixelWidthHeightRatio 处理非方形像素（老 DVD 转码常见），
@@ -577,6 +583,39 @@ class PlaybackController(private val context: Context) {
                     hint = "音频轨之外的部分也解不了，这个文件需要先转码。",
                 )
             }
+        }
+    }
+
+    /**
+     * 检查「有音轨但一条都没被选中」。
+     *
+     * 这是最容易被忽略的失败形态：ExoPlayer 遇到解不了的编码时**不一定报错**，
+     * 只是把那条轨排除掉，结果就是画面正常、完全没有声音，用户以为是手机坏了。
+     * 在 READY 时补一次检查，把编码名报出来，至少知道该换音轨还是该转码。
+     */
+    private fun warnIfAudioUnplayable() {
+        // 已经主动静音了，别再用「解不了」打扰一次
+        if (audioDisabledVideoId != null) return
+        val videoId = currentVideoId ?: return
+        if (audioWarningVideoId == videoId) return
+
+        val tracks = controller?.currentTracks ?: return
+        val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (audio.isEmpty()) return
+        val anySelected = audio.any { group ->
+            (0 until group.length).any { group.isTrackSelected(it) }
+        }
+        if (anySelected) return
+
+        audioWarningVideoId = videoId
+        val codecs = audio
+            .mapNotNull { it.getTrackFormat(0).sampleMimeType }
+            .distinct()
+            .joinToString(" / ") { it.substringAfter('/').uppercase() }
+        noticeMessage = if (codecs.isBlank()) {
+            "这个文件没有可播放的音轨，已静音播放"
+        } else {
+            "音轨（$codecs）本机解不了，已静音播放；可换一条音轨，或转成 AAC"
         }
     }
 
