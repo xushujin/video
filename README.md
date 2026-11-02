@@ -6,7 +6,7 @@
 - 版本 **v1.10.0**（`versionCode = 16`，`versionName = "1.10.0"`，tag `v1.10.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 26 个 Kotlin 文件、约 6400 行
-- release APK 约 **8.7 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
+- release APK 约 **9 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
 
 ---
 
@@ -249,7 +249,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.0-release.apk` | **8.7 MB**（含 FFmpeg） |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.0-release.apk` | **约 9 MB**（含 FFmpeg） |
 | debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.10.0-debug.apk` | 约 30 MB |
 
 装到手机：
@@ -508,7 +508,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   验签 `CN=QingYing` / `3fa551ff…17ec`，并确认 dex 里包含新提示文案。
   需要一条「编码不被支持」的样本来验证提示是否弹出
 - **v1.10.0（FFmpeg 软解）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告；APK 8.7 MB，只含 arm64-v8a / armeabi-v7a，`.so` 已压缩。
+  Kotlin 编译零警告；CI Run 18 成功，Release 附件 `QingYing-v1.10.0.apk`（9.1 MB，
+  含 arm64-v8a / armeabi-v7a 两套 FFmpeg 库），验签 `CN=QingYing` / `3fa551ff…17ec`。
   **AC3 是否真的出声还没在真机验证** —— 这是这一版最需要确认的事
 
 **未验证：**
@@ -671,5 +672,5 @@ GitHub Secrets 名或「讨论旧写法」的语境。
 | nextlib-media3ext | FFmpeg 软解（AC3 / EAC3 / DTS / TrueHD / MP2） | GPL-3.0 |
 | FFmpeg | 由上述 AAR 打包进来 | 随 nextlib 的构建选项 |
 
-体积也是这项功能的代价：release APK 从 2.2 MB 涨到 **8.7 MB**（只保留 arm64-v8a 与
+体积也是这项功能的代价：release APK 从 2.2 MB 涨到 **约 9 MB**（只保留 arm64-v8a 与
 armeabi-v7a 两个 ABI，且对 `.so` 启用了压缩打包；不压缩的话是 17 MB）。
