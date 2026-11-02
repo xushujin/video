@@ -503,7 +503,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 16 成功，Release 附件 `QingYing-v1.9.0.apk`（2.2 MB）
   验签 `CN=QingYing` / `3fa551ff…17ec`。音轨切换与锁定交互尚未真机验证
 - **v1.9.1（静默无音轨兜底）**：本地 `assembleRelease` 通过（含 `lintVitalRelease` / R8），
-  Kotlin 编译零警告。需要一条「编码不被支持」的样本来验证提示是否弹出
+  Kotlin 编译零警告；CI Run 17 成功，Release 附件 `QingYing-v1.9.1.apk`（2.2 MB）
+  验签 `CN=QingYing` / `3fa551ff…17ec`，并确认 dex 里包含新提示文案。
+  需要一条「编码不被支持」的样本来验证提示是否弹出
 
 **未验证：**
 
