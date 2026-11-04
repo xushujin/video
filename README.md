@@ -517,7 +517,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   含 arm64-v8a / armeabi-v7a 两套 FFmpeg 库），验签 `CN=QingYing` / `3fa551ff…17ec`。
   **AC3 是否真的出声还没在真机验证** —— 这是这一版最需要确认的事
 - **v1.10.1（RealMedia 预检与白名单说明）**：本地 `assembleRelease` 通过（含
-  `lintVitalRelease` / R8），Kotlin 编译零警告。只改提示与预检，不改解码路径
+  `lintVitalRelease` / R8），Kotlin 编译零警告；CI Run 19 成功，Release 附件
+  `QingYing-v1.10.1.apk`（9.1 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
+  只改提示与预检，不改解码路径
 
 **未验证：**
 
