@@ -3,10 +3,10 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.10.1**（`versionCode = 17`，`versionName = "1.10.1"`，tag `v1.10.1`）
+- 版本 **v1.11.0**（`versionCode = 18`，`versionName = "1.11.0"`，tag `v1.11.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
-- 26 个 Kotlin 文件、约 6400 行
-- release APK 约 **9 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
+- 26 个 Kotlin 文件 + 一个 Java 的 FFmpeg 扩展模块（约 730 行）
+- release APK 约 **6.9 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
 
 ---
 
@@ -107,8 +107,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **音轨解不了时分级降级**：先切**音频软解**重试一次（厂商硬解实现有问题时，系统自带的
   C2 软解往往能解），软解也失败才关掉音频轨、回到原位置继续放画面，并提示一次「已静音播放」。
   只对当前视频生效，切到别的视频会交还硬解、并重新打开音频轨
-- **系统没有的音轨也能放**：内置 FFmpeg 软解（nextlib），AC3 / EAC3 / DTS / TrueHD / MP2
-  这类系统不支持的音轨自动落到软解；有硬件解码器时仍优先硬解，不会平白多耗电
+- **系统没有的音轨也能放**：内置自己编的 FFmpeg（LGPL），覆盖 AC3 / EAC3 / DTS / TrueHD /
+  **MP2** / AAC / MP3 / FLAC / Opus / Vorbis / ALAC。音频统一走软解，视频仍由硬件解码；
+  只编音频解码器，APK 因此比用现成 AAR 时还小
 - **静默失败的兜底**：还有一类文件根本不报错 —— ExoPlayer 直接把解不了的音轨排除掉，
   画面正常、全程无声。READY 时会检查「有音轨但一条都没选中」，弹出带编码名的提示
   （如「音轨（AC3）本机解不了」），这样至少知道该换音轨还是该转码
@@ -180,6 +181,10 @@ video/
 ├── gradlew / gradlew.bat / gradle/wrapper/
 ├── .github/workflows/build-apk.yml     # tag 触发构建 + 挂 Release
 ├── fdroid/                             # F-Droid 收录材料（需提交到 fdroiddata）
+├── lib-decoder-ffmpeg/                 # 自编 FFmpeg 的 media3 扩展（Java + 预编译 .so）
+│   ├── src/main/java/…/ffmpeg/         # FfmpegAudioRenderer 等 4 个类（取自 media3 1.11.1）
+│   ├── src/main/jniLibs/<abi>/         # libffmpegJNI.so（arm64-v8a / armeabi-v7a）
+│   └── tools/build_ffmpeg.sh           # 重新编 FFmpeg + JNI 的脚本（需要 NDK）
 └── app/src/main/
     ├── AndroidManifest.xml
     ├── res/                            # 主题 + 自适应图标（纯矢量，无二进制图）
@@ -249,13 +254,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.1-release.apk` | **约 9 MB**（含 FFmpeg） |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.10.1-debug.apk` | 约 30 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.11.0-release.apk` | **6.9 MB**（含 FFmpeg） |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.11.0-debug.apk` | 约 30 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.10.1-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.11.0-release.apk
 ```
 
 ### 签名
@@ -276,14 +281,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.10.1          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.10.1  # 推上去即触发编译
+git tag v1.11.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.11.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.10.1.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.11.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -319,7 +324,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.10.1-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.11.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -431,14 +436,16 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器。
   播不了会给分类后的错误提示，不是静默黑屏。
   - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2）或 AC3，MIME 可能报「支持」
-    但真解码失败。v1.8.1 起先切系统软解；v1.10.0 起内置 FFmpeg 兜底 AC3 / EAC3 / DTS /
-    TrueHD，但**MP2 不在 FFmpeg 的编译白名单里**，仍然只能转码
+    但真解码失败。v1.11.0 起音频统一走自编的 FFmpeg，MP2 / AC3 / DTS 都能正常出声
   - **RMVB 是真的不支持**：这是**容器**问题，不是编码问题 —— ExoPlayer 没有 RealMedia
     提取器，而内置 FFmpeg 只提供解码器、不提供解复用器，所以连轨道都读不出来。
     v1.10.1 起选中 .rm/.rmvb 会直接给结论，不再走一遍注定失败的 prepare。
     只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
-  - **内置软解的音轨白名单**：AC3 / EAC3 / DTS / TrueHD / AAC / MP3 / FLAC / Opus /
-    Vorbis / ALAC。WMA、RealAudio（cook）、ATRAC、APE 不在其中，需要转码
+  - **内置软解的音轨白名单**：AC3 / EAC3 / DTS / TrueHD / **MP2** / AAC / MP3 / FLAC /
+    Opus / Vorbis / ALAC。WMA、RealAudio（cook）、ATRAC、APE 不在其中，需要转码
+  - **音频一律软解**：扩展渲染器排在平台渲染器前面（`EXTENSION_RENDERER_MODE_PREFER`），
+    因为 MP2 的 MIME 也是 `audio/mpeg`，系统的 MP3 解码器会「声称支持」，兜底模式轮不到它。
+    视频不受影响，仍是硬件解码
 - **时长 / 分辨率探测是逐个文件做的**，超大目录首次展开会看到「正在读取时长…」停留一会儿。
 - **缩略图不落盘**，只做内存缓存（16 MB LRU）；每次冷启动都要重新取帧。
 - **扫描上限 3000 个文件 / 8 层深度**，超出部分不收录（`VideoScanner` 里的常量）。
@@ -520,6 +527,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   `lintVitalRelease` / R8），Kotlin 编译零警告；CI Run 19 成功，Release 附件
   `QingYing-v1.10.1.apk`（9.1 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
   只改提示与预检，不改解码路径
+- **v1.11.0（自编 FFmpeg，补上 MP2）**：本地 `assembleRelease` 通过（含
+  `lintVitalRelease` / R8），Kotlin 编译零警告；APK 6.9 MB，`libffmpegJNI.so`
+  含 `ff_mp2_decoder` 符号（arm64 / v7a 各 6.4 / 5.4 MB）。**MP2 实际出声尚未真机验证**
 
 **未验证：**
 
@@ -671,15 +681,15 @@ GitHub Secrets 名或「讨论旧写法」的语境。
 
 本项目按 **GPL-3.0-only** 发布，全文见 `LICENSE`。
 
-改许可证的原因只有一个：**软解**。`nextlib-media3ext` 把 FFmpeg 的解码器打包成 AAR，
-自身是 GPL-3.0；按 GPL 的要求，链接它的应用整体也必须以 GPL 发布。
-如果以后换成自己用 `--disable-gpl` 编译的 LGPL 版 FFmpeg 扩展，可以再改回 Apache-2.0。
+原因：内置的音频软解是 FFmpeg。它以 **LGPL-2.1+** 编译（`--disable-gpl`），
+静态链接进 `libffmpegJNI.so`。LGPL 对静态链接有「允许用户重新链接」的义务，
+把整个项目按 GPL-3.0 发布是满足它最省事的方式 —— 源码、构建脚本都在仓库里。
 
 | 组件 | 用途 | 许可证 |
 |---|---|---|
 | AndroidX / media3 | UI、播放内核 | Apache-2.0 |
-| nextlib-media3ext | FFmpeg 软解（AC3 / EAC3 / DTS / TrueHD / MP2） | GPL-3.0 |
-| FFmpeg | 由上述 AAR 打包进来 | 随 nextlib 的构建选项 |
+| FFmpeg 7.1.1 | 音频软解（AC3 / EAC3 / DTS / TrueHD / MP2 / AAC…） | LGPL-2.1+（`--disable-gpl`） |
+| media3 decoder_ffmpeg | JNI 桥与 AudioRenderer | Apache-2.0 |
 
-体积也是这项功能的代价：release APK 从 2.2 MB 涨到 **约 9 MB**（只保留 arm64-v8a 与
-armeabi-v7a 两个 ABI，且对 `.so` 启用了压缩打包；不压缩的话是 17 MB）。
+体积：release APK **约 6.9 MB**（只保留 arm64-v8a 与 armeabi-v7a，`.so` 压缩打包）。
+FFmpeg 只编了音频解码器，没有视频解码器，所以比上一版用现成 AAR 时还小。

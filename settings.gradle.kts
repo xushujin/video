@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "QingYing"
 include(":app")
+include(":lib-decoder-ffmpeg")

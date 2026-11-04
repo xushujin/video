@@ -1,0 +1,8 @@
+MP2 audio now plays, and the player got smaller.
+
+* The bundled FFmpeg is now built for this app only, with the audio decoders it
+  needs - including MP2 (MPEG-1 Layer II), the codec found in many old AVI files
+* AC3, EAC3, DTS, TrueHD, AAC, MP3, FLAC, Opus, Vorbis and ALAC all decode in
+  software, so a device codec can no longer be the reason a file stays silent
+* Video is still decoded in hardware; only audio goes through FFmpeg
+* Because the build leaves out video decoders, the APK shrank from 9.1 MB to 6.9 MB

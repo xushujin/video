@@ -28,8 +28,8 @@ android {
         applicationId = "com.azhan.qingying"
         minSdk = 26
         targetSdk = 37
-        versionCode = 17
-        versionName = "1.10.1"
+        versionCode = 18
+        versionName = "1.11.0"
     }
 
     // 只保留中英两种语言资源，顺带把 AndroidX 里其它语种的翻译裁掉。
@@ -147,8 +147,8 @@ dependencies {
     implementation(libs.androidx.media3.session)
 
     // 软件解码：给系统没有解码器的音轨（AC3 / EAC3 / DTS / TrueHD / MP2）兜底。
-    // 注意：nextlib 是 GPL-3.0，所以本应用整体也按 GPL-3.0 发布（见 LICENSE）。
-    implementation(libs.nextlib.media3ext)
+    // 用的是自己编的 FFmpeg（LGPL，--disable-gpl），源码在 lib-decoder-ffmpeg/
+    implementation(project(":lib-decoder-ffmpeg"))
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.documentfile)

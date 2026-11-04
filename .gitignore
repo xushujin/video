@@ -34,6 +34,9 @@ captures/
 .cxx/
 .kotlin/
 
+# ---------- 本机工具链（NDK，3 GB，不入库） ----------
+.toolchain/
+
 # ---------- 系统文件 ----------
 .DS_Store
 Thumbs.db
