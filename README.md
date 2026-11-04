@@ -528,8 +528,10 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   `QingYing-v1.10.1.apk`（9.1 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
   只改提示与预检，不改解码路径
 - **v1.11.0（自编 FFmpeg，补上 MP2）**：本地 `assembleRelease` 通过（含
-  `lintVitalRelease` / R8），Kotlin 编译零警告；APK 6.9 MB，`libffmpegJNI.so`
-  含 `ff_mp2_decoder` 符号（arm64 / v7a 各 6.4 / 5.4 MB）。**MP2 实际出声尚未真机验证**
+  `lintVitalRelease` / R8），Kotlin 编译零警告；CI Run 20 成功，Release 附件
+  `QingYing-v1.11.0.apk`（7.25 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
+  已确认包内 `libffmpegJNI.so` 含 `ff_mp2_decoder` 符号。
+  **MP2 实际出声尚未真机验证**
 
 **未验证：**
 
