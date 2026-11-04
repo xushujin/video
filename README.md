@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.10.0**（`versionCode = 16`，`versionName = "1.10.0"`，tag `v1.10.0`）
+- 版本 **v1.10.1**（`versionCode = 17`，`versionName = "1.10.1"`，tag `v1.10.1`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 26 个 Kotlin 文件、约 6400 行
 - release APK 约 **9 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
@@ -249,13 +249,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.0-release.apk` | **约 9 MB**（含 FFmpeg） |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.10.0-debug.apk` | 约 30 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.10.1-release.apk` | **约 9 MB**（含 FFmpeg） |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.10.1-debug.apk` | 约 30 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.10.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.10.1-release.apk
 ```
 
 ### 签名
@@ -276,14 +276,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.10.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.10.0  # 推上去即触发编译
+git tag v1.10.1          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.10.1  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.10.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.10.1.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -319,7 +319,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.10.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.10.1-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -431,9 +431,14 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   但 rmvb、部分 HEVC 10bit、带 DRM 的文件能否播取决于厂商解码器。
   播不了会给分类后的错误提示，不是静默黑屏。
   - **AVI 的音轨是常见坑**：里面常封 MPEG-1 Layer II（MP2）或 AC3，MIME 可能报「支持」
-    但真解码失败。v1.8.1 起先切系统软解，v1.10.0 起内置 FFmpeg 兜底，这类音轨能正常出声
-  - **RMVB 是真的不支持**：ExoPlayer 没有 RealMedia 提取器，手机也基本没有 RealVideo 解码器，
-    静音降级也救不回来，只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
+    但真解码失败。v1.8.1 起先切系统软解；v1.10.0 起内置 FFmpeg 兜底 AC3 / EAC3 / DTS /
+    TrueHD，但**MP2 不在 FFmpeg 的编译白名单里**，仍然只能转码
+  - **RMVB 是真的不支持**：这是**容器**问题，不是编码问题 —— ExoPlayer 没有 RealMedia
+    提取器，而内置 FFmpeg 只提供解码器、不提供解复用器，所以连轨道都读不出来。
+    v1.10.1 起选中 .rm/.rmvb 会直接给结论，不再走一遍注定失败的 prepare。
+    只能转码（`ffmpeg -i in.rmvb -c:v libx264 -c:a aac out.mp4`）
+  - **内置软解的音轨白名单**：AC3 / EAC3 / DTS / TrueHD / AAC / MP3 / FLAC / Opus /
+    Vorbis / ALAC。WMA、RealAudio（cook）、ATRAC、APE 不在其中，需要转码
 - **时长 / 分辨率探测是逐个文件做的**，超大目录首次展开会看到「正在读取时长…」停留一会儿。
 - **缩略图不落盘**，只做内存缓存（16 MB LRU）；每次冷启动都要重新取帧。
 - **扫描上限 3000 个文件 / 8 层深度**，超出部分不收录（`VideoScanner` 里的常量）。
@@ -511,6 +516,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   Kotlin 编译零警告；CI Run 18 成功，Release 附件 `QingYing-v1.10.0.apk`（9.1 MB，
   含 arm64-v8a / armeabi-v7a 两套 FFmpeg 库），验签 `CN=QingYing` / `3fa551ff…17ec`。
   **AC3 是否真的出声还没在真机验证** —— 这是这一版最需要确认的事
+- **v1.10.1（RealMedia 预检与白名单说明）**：本地 `assembleRelease` 通过（含
+  `lintVitalRelease` / R8），Kotlin 编译零警告。只改提示与预检，不改解码路径
 
 **未验证：**
 

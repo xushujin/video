@@ -124,6 +124,14 @@ fun AudioTrackPanel(
                     },
                 )
             }
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "内置软解覆盖：AC3 / EAC3 / DTS / TrueHD / AAC / MP3 / FLAC / Opus / Vorbis / ALAC。" +
+                    "其他编码（MP2、WMA、RealAudio 等）需要转成 AAC 才能出声。",
+                color = palette.textSecondary,
+                fontSize = 10.sp,
+            )
         }
     }
 }

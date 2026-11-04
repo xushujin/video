@@ -303,6 +303,22 @@ class PlaybackController(private val context: Context) {
     /** 用整张列表当播放队列，从 [startIndex] 开始播，并定位到 [startPositionMs]。 */
     fun play(videos: List<VideoItem>, startIndex: Int, startPositionMs: Long = 0L) {
         if (videos.isEmpty()) return
+        val index = startIndex.coerceIn(0, videos.size - 1)
+        val target = videos[index]
+
+        // RealMedia 是**容器**没有解析器，不是解码器的问题 —— 内置 FFmpeg 只提供解码器，
+        // 不提供解复用器，所以这类文件连轨道都读不出来。直接给结论，别让它去 prepare 再报错。
+        if (target.ext in UNSUPPORTED_CONTAINERS) {
+            controller?.pause()
+            playbackError = PlaybackErrorInfo(
+                title = "RealMedia 视频播不了",
+                detail = "文件：${target.fileName}",
+                hint = "RM / RMVB 的容器没有解析器，装解码器也救不了。用电脑转成 MP4 再播：\n" +
+                    "ffmpeg -i \"输入.rmvb\" -c:v libx264 -crf 23 -c:a aac \"输出.mp4\"",
+            )
+            return
+        }
+
         val mediaController = controller
         if (mediaController == null) {
             connect()
@@ -310,7 +326,6 @@ class PlaybackController(private val context: Context) {
             return
         }
         val items = videos.map { it.toMediaItem() }
-        val index = startIndex.coerceIn(0, items.size - 1)
         mediaController.setMediaItems(items, index, startPositionMs.coerceAtLeast(0L))
         mediaController.prepare()
         mediaController.play()
@@ -615,7 +630,7 @@ class PlaybackController(private val context: Context) {
         noticeMessage = if (codecs.isBlank()) {
             "这个文件没有可播放的音轨，已静音播放"
         } else {
-            "音轨（$codecs）本机解不了，已静音播放；可换一条音轨，或转成 AAC"
+            "音轨（$codecs）解不了：内置软解也不含这个编码，可换音轨或转成 AAC"
         }
     }
 
@@ -677,7 +692,8 @@ class PlaybackController(private val context: Context) {
             return PlaybackErrorInfo(
                 title = "音频解码失败",
                 detail = detail,
-                hint = "设备没有能解这条音轨的解码器（AVI 里的 MP2、部分 AC3 常见）。转成 AAC 再播即可。",
+                hint = "内置软解覆盖 AC3 / EAC3 / DTS / TrueHD / AAC / MP3 / FLAC / Opus / Vorbis / ALAC。" +
+                    "MP2、WMA、RealAudio 这类不在其中，需要转成 AAC。",
             )
         }
 
@@ -696,7 +712,8 @@ class PlaybackController(private val context: Context) {
             -> PlaybackErrorInfo(
                 title = "这个文件播不了",
                 detail = detail,
-                hint = "容器或索引损坏，或者格式本身不被支持（RealMedia / RMVB 属于这类）。需要先转码。",
+                hint = "容器或索引损坏，或者格式本身不被支持（RealMedia / RMVB 属于这类，没有解析器）。\n" +
+                    "转码：ffmpeg -i \"输入\" -c:v libx264 -crf 23 -c:a aac \"输出.mp4\"",
             )
 
             in 4001..4005 -> PlaybackErrorInfo(
@@ -826,3 +843,12 @@ data class PlaybackErrorInfo(
     val detail: String,
     val hint: String,
 )
+
+/**
+ * 没有解析器（demuxer）的容器。
+ *
+ * 注意这里指的是**容器**而不是编码：内置 FFmpeg 只提供解码器，
+ * 解复用仍由 media3 的 extractor 负责，而它不认识 RealMedia。
+ * 所以这些扩展名不必浪费一次 prepare，直接给出结论。
+ */
+private val UNSUPPORTED_CONTAINERS = setOf("rm", "rmvb", "rmhd")

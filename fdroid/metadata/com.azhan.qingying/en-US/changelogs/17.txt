@@ -1,0 +1,7 @@
+Clearer messages for files that still cannot play.
+
+* Picking a .rm or .rmvb file now says up front that RealMedia is not supported,
+  with the ffmpeg command to convert it, instead of failing after a prepare
+* The audio track panel lists which codecs the built-in software decoder covers
+* The "no playable audio" notice now explains that MP2, WMA and RealAudio are
+  outside that list and need converting to AAC
