@@ -534,7 +534,8 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   `QingYing-v1.11.0.apk`（7.25 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
   已确认包内 `libffmpegJNI.so` 含 `ff_mp2_decoder` 符号。
   **MP2 实际出声尚未真机验证**
-- **v1.12.0（新图标）**：本地 `assembleRelease` 通过，Kotlin 编译零警告。
+- **v1.12.0（新图标）**：本地 `assembleRelease` 通过，Kotlin 编译零警告；CI Run 21 成功，
+  Release 附件 `QingYing-v1.12.0.apk`（7.25 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
   图标是纯矢量（无位图资源），已在 512px / 48px 两档渲染确认可辨识；
   各家启动器的遮罩形状（圆形 / 方圆形）没有逐一验证
 
