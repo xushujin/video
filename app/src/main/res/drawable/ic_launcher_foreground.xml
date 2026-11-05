@@ -1,39 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  图标上层：拟态凸起圆盘 + 强调色播放三角。
+  图标上层：一块被压出来的哑光圆盘，中间凹进一个播放三角。
 
-  配色对齐**浅色外壳**（LightShell）：圆盘用 #EDEFF3，右下月牙用比调色板阴影
-  #C2C8D2 略深的 #B9C0CE（图标面积小，直接用原值对比度不够，看不出凸起），
-  三角用强调色 #4E62E0。
+  只有一个光源（左上），体积全部由渐变给出，没有描边、没有分割线、没有第二光源：
+    · 光晕：圆盘左上外侧一圈极淡的白色，模拟光贴着材料边缘散开；
+    · 投影：圆盘右下外侧一圈极淡的冷灰，边缘自然消失；
+    · 圆盘：左上 #FAFCFE → 右下 #DEE4EE。线性渐变比径向更均匀，
+      不会在中心留一个「热点」把圆盘切成两个同心圆；
+    · 三角：反过来（左上 #AEB9CA 暗、右下 #D3DBE8 亮），
+      凹坑的远壁迎着光，所以越靠右下越亮 —— 这是「凹陷」而不是「凸起」的判据。
 
-  立体感做法：右下偏移的阴影月牙 + 圆盘用比背景更亮的底色，纯色填充，
-  不依赖向量渐变（避免 <gradient> 的坐标单位歧义）。
+  三角占圆盘不到一半，留白充足；缩到 48dp 时靠「圆盘 + 三角」的轮廓仍能认出来。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 阴影：比圆盘略大、向右下偏移，只在右下露出一道月牙 -->
-    <path
-        android:pathData="M55,55m-30.5,0a30.5,30.5 0 1,0 61,0a30.5,30.5 0 1,0 -61,0"
-        android:fillColor="#FFB9C0CE" />
+    <!-- 光晕：贴着左上边缘，白色渐隐 -->
+    <path android:pathData="M52,51.5m-37,0a37,37 0 1,0 74,0a37,37 0 1,0 -74,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="52"
+                android:centerY="51.5"
+                android:gradientRadius="37"
+                android:startColor="#A6FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </aapt:attr>
+    </path>
 
-    <!-- 凸起圆盘：用浅色外壳背景色 -->
-    <path
-        android:pathData="M54,54m-30,0a30,30 0 1,0 60,0a30,30 0 1,0 -60,0"
-        android:fillColor="#FFEDEFF3" />
+    <!-- 投影：向右下偏 1.5dp，只在右下露出一道软边 -->
+    <path android:pathData="M55.5,56.5m-34,0a34,34 0 1,0 68,0a34,34 0 1,0 -68,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="55.5"
+                android:centerY="56.5"
+                android:gradientRadius="34"
+                android:startColor="#4D8C95A8"
+                android:endColor="#008C95A8" />
+        </aapt:attr>
+    </path>
 
-    <!-- 播放三角：24dp 图标的包围盒是 x 8~19 / y 5~19（中心约 13.5,12），
-         放大 2.4 倍后 translate = 54 - 13.5*2.4 = 21.6，纵向 54 - 12*2.4 = 25.2 -->
-    <group
-        android:scaleX="2.4"
-        android:scaleY="2.4"
-        android:translateX="21.6"
-        android:translateY="25.2">
-        <path
-            android:pathData="M8,5v14l11,-7z"
-            android:fillColor="#FF4E62E0" />
-    </group>
+    <!-- 圆盘：线性渐变，左上亮、右下暗 -->
+    <path android:pathData="M54,54m-32,0a32,32 0 1,0 64,0a32,32 0 1,0 -64,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="30"
+                android:startY="27"
+                android:endX="79"
+                android:endY="82"
+                android:startColor="#FFFAFCFE"
+                android:endColor="#FFDEE4EE" />
+        </aapt:attr>
+    </path>
+
+    <!-- 凹陷的播放三角：圆角处理，顶点不带锐角；重心落在 54.7，视觉居中 -->
+    <path
+        android:pathData="M45,43.5
+            Q45,38 49.82,40.66
+            L69.18,51.34
+            Q74,54 69.18,56.66
+            L49.82,67.34
+            Q45,70 45,64.5
+            Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="45"
+                android:startY="38"
+                android:endX="74"
+                android:endY="70"
+                android:startColor="#FFAEB9CA"
+                android:endColor="#FFD3DBE8" />
+        </aapt:attr>
+    </path>
 </vector>

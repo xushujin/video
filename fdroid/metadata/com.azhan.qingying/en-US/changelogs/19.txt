@@ -1,0 +1,9 @@
+A new icon: a matte pebble with a pressed-in play triangle.
+
+* One soft light source from the upper left - the shape is defined by light, not
+  by outlines or dividers
+* Low-saturation, near-monochrome palette with a single focal point and generous
+  empty space
+* The triangle is recessed rather than painted on: its far wall catches the light,
+  so the icon reads as a physical object instead of a flat sticker
+* Replaces the old flat disc with the bright blue triangle

@@ -3,7 +3,7 @@
 原生 Android 播放器，Kotlin + Jetpack Compose，**零第三方 UI 库、零 DI 框架**。
 只做一件事：把你手机里本地的视频，按文件夹列出来、舒服地播掉。
 
-- 版本 **v1.11.0**（`versionCode = 18`，`versionName = "1.11.0"`，tag `v1.11.0`）
+- 版本 **v1.12.0**（`versionCode = 19`，`versionName = "1.12.0"`，tag `v1.12.0`）
 - 包名 `com.azhan.qingying` ｜ minSdk 26（Android 8.0）｜ targetSdk 37
 - 26 个 Kotlin 文件 + 一个 Java 的 FFmpeg 扩展模块（约 730 行）
 - release APK 约 **6.9 MB**（其中 FFmpeg 软解库占大头，见「许可证」一节）
@@ -153,7 +153,9 @@ ExoPlayer 只解音频 —— 既省电，也不会出现「Surface 被销毁了
 - **播放页恒为近黑**，不受上面那项影响 ——
   内容页不该被导航页的配色污染，画面边缘也不该出现一圈亮框
 - 启动窗口背景跟随浅色外壳（`windowBackground = #EDEFF3`），避免启动瞬间闪一下深色
-- 自适应图标同样按浅色配色重绘（圆盘 `#EDEFF3` / 月牙 `#B9C0CE` / 三角 `#4E62E0`）
+- 自适应图标是一块**哑光圆盘 + 凹陷播放三角**，单光源（左上）：
+  圆盘 `#FAFCFE → #DEE4EE`、三角反向渐变 `#AEB9CA → #D3DBE8`（凹坑远壁迎光），
+  外面只有一圈极淡的光晕与投影，没有描边、没有第二光源
 
 ### 8. 在线更新
 
@@ -254,13 +256,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 | 包 | 路径 | 体积 |
 |---|---|---|
-| release（推荐） | `app/build/outputs/apk/release/QingYing-1.11.0-release.apk` | **6.9 MB**（含 FFmpeg） |
-| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.11.0-debug.apk` | 约 30 MB |
+| release（推荐） | `app/build/outputs/apk/release/QingYing-1.12.0-release.apk` | **6.9 MB**（含 FFmpeg） |
+| debug（便于看崩溃堆栈） | `app/build/outputs/apk/debug/QingYing-1.12.0-debug.apk` | 约 30 MB |
 
 装到手机：
 
 ```bash
-adb install -r app/build/outputs/apk/release/QingYing-1.11.0-release.apk
+adb install -r app/build/outputs/apk/release/QingYing-1.12.0-release.apk
 ```
 
 ### 签名
@@ -281,14 +283,14 @@ release 包用 `keystore/qingying-release.jks` 签名：
 仓库自带 `.github/workflows/build-apk.yml`：**打 tag 才触发**（也可在 Actions 页手动触发）。
 
 ```bash
-git tag v1.11.0          # 需以 v 开头，建议与 versionName 一致
-git push origin v1.11.0  # 推上去即触发编译
+git tag v1.12.0          # 需以 v 开头，建议与 versionName 一致
+git push origin v1.12.0  # 推上去即触发编译
 ```
 
 产物有两个去处：
 
 - **GitHub Release**（仅 tag 构建）：自动创建/更新对应 tag 的 Release，并把 APK
-  作为附件挂上去，文件名形如 `QingYing-v1.11.0.apk`
+  作为附件挂上去，文件名形如 `QingYing-v1.12.0.apk`
   （**附件名必须纯 ASCII**：GitHub 会删掉 Release 资源名里的非 ASCII 字符）
 - **Artifact**（tag 与手动触发都有）：名为 `qingying-release-apk`，保留 90 天
 
@@ -324,7 +326,7 @@ base64 -i keystore/qingying-release.jks
 本地用同一条命令对照：
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.11.0-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/QingYing-1.12.0-release.apk
 ```
 
 两边的 SHA-256 必须一致（本项目本地是 `3fa551ff…17ec`），否则那个包无法覆盖安装。
@@ -532,6 +534,9 @@ mp3 / aac / flac / opus / vorbis 等常见编码。只有 MP2、AC3、DTS 这类
   `QingYing-v1.11.0.apk`（7.25 MB）验签 `CN=QingYing` / `3fa551ff…17ec`。
   已确认包内 `libffmpegJNI.so` 含 `ff_mp2_decoder` 符号。
   **MP2 实际出声尚未真机验证**
+- **v1.12.0（新图标）**：本地 `assembleRelease` 通过，Kotlin 编译零警告。
+  图标是纯矢量（无位图资源），已在 512px / 48px 两档渲染确认可辨识；
+  各家启动器的遮罩形状（圆形 / 方圆形）没有逐一验证
 
 **未验证：**
 
